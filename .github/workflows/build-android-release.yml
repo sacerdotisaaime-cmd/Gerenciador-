@@ -1,4 +1,4 @@
-name: Build Android APK - RELEASE
+name: Build Android APK - RELEASE - AUDIO SHARE
 
 on:
   workflow_dispatch:
@@ -11,20 +11,36 @@ jobs:
       contents: read
 
     steps:
+
+      # ============================================================
+      # 1. BAIXAR PROJETO
+      # ============================================================
       - name: Baixar projeto
         uses: actions/checkout@v4
 
+
+      # ============================================================
+      # 2. NODE
+      # ============================================================
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
+
+      # ============================================================
+      # 3. JAVA
+      # ============================================================
       - name: Configurar Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
+
+      # ============================================================
+      # 4. VALIDAR SECRETS
+      # ============================================================
       - name: Validar secrets de assinatura
         shell: bash
         env:
@@ -55,39 +71,52 @@ jobs:
             exit 1
           }
 
-          echo "Secrets de assinatura reconhecidas."
+          echo "Secrets reconhecidas."
 
+
+      # ============================================================
+      # 5. ENCONTRAR ZIP
+      # ============================================================
       - name: Encontrar ZIP do projeto
         shell: bash
         run: |
           set -e
 
           mapfile -t ZIPS < <(
-            find . -maxdepth 2 -type f -iname "*.zip" \
-            ! -path "./.git/*" \
-            | sort
+            find . -maxdepth 2 \
+              -type f \
+              -iname "*.zip" \
+              ! -path "./.git/*" \
+              | sort
           )
 
           COUNT="${#ZIPS[@]}"
 
           if [ "$COUNT" -eq 0 ]; then
-            echo "ERRO: nenhum ZIP foi encontrado."
+            echo "ERRO: nenhum ZIP encontrado."
             exit 1
           fi
 
           if [ "$COUNT" -gt 1 ]; then
-            echo "ERRO: foram encontrados vários ZIPs."
+            echo "ERRO: existem vários ZIPs."
+            echo "Deixe somente o ZIP da versão que será compilada."
             printf '%s\n' "${ZIPS[@]}"
             exit 1
           fi
 
           ZIP_FILE="${ZIPS[0]}"
 
-          echo "ZIP selecionado: $ZIP_FILE"
+          echo "ZIP selecionado:"
+          echo "$ZIP_FILE"
+
           ls -lh "$ZIP_FILE"
 
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
+
+      # ============================================================
+      # 6. DESCOMPACTAR
+      # ============================================================
       - name: Descompactar projeto
         shell: bash
         run: |
@@ -98,15 +127,22 @@ jobs:
 
           unzip -q "$ZIP_FILE" -d app
 
+
+      # ============================================================
+      # 7. LOCALIZAR PROJETO
+      # ============================================================
       - name: Localizar projeto
         shell: bash
         run: |
           set -e
 
-          PROJECT_PACKAGE=$(find app \
-            -name package.json \
-            -not -path "*/node_modules/*" \
-            -print | head -n 1)
+          PROJECT_PACKAGE=$(
+            find app \
+              -name package.json \
+              -not -path "*/node_modules/*" \
+              -print \
+              | head -n 1
+          )
 
           if [ -z "$PROJECT_PACKAGE" ]; then
             echo "ERRO: package.json não encontrado."
@@ -115,9 +151,15 @@ jobs:
 
           PROJECT_DIR=$(dirname "$PROJECT_PACKAGE")
 
-          echo "Projeto: $PROJECT_DIR"
+          echo "Projeto encontrado:"
+          echo "$PROJECT_DIR"
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
+
+      # ============================================================
+      # 8. AJUSTAR DEPENDÊNCIAS
+      # ============================================================
       - name: Ajustar dependências
         shell: bash
         run: |
@@ -129,9 +171,14 @@ jobs:
           const fs = require('fs');
 
           const file = 'package.json';
-          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-          const deps = pkg.dependencies || (pkg.dependencies = {});
+          const pkg = JSON.parse(
+            fs.readFileSync(file, 'utf8')
+          );
+
+          const deps =
+            pkg.dependencies ||
+            (pkg.dependencies = {});
 
           deps['@capacitor/core'] = '^7.4.3';
           deps['@capacitor/android'] = '^7.4.3';
@@ -151,6 +198,10 @@ jobs:
           rm -rf node_modules
           rm -f package-lock.json
 
+
+      # ============================================================
+      # 9. INSTALAR
+      # ============================================================
       - name: Instalar dependências
         shell: bash
         run: |
@@ -159,8 +210,13 @@ jobs:
           cd "$PROJECT_DIR"
 
           npm install
+
           npm install -D @capacitor/cli@7.4.3
 
+
+      # ============================================================
+      # 10. BUILD WEB
+      # ============================================================
       - name: Compilar aplicação web
         shell: bash
         run: |
@@ -170,6 +226,10 @@ jobs:
 
           npx vite build
 
+
+      # ============================================================
+      # 11. ADICIONAR ANDROID
+      # ============================================================
       - name: Adicionar Android
         shell: bash
         run: |
@@ -179,6 +239,10 @@ jobs:
 
           npx cap add android
 
+
+      # ============================================================
+      # 12. SDK MÍNIMO
+      # ============================================================
       - name: Ajustar SDK Android
         shell: bash
         run: |
@@ -192,6 +256,10 @@ jobs:
               "$VARIABLES"
           fi
 
+
+      # ============================================================
+      # 13. SINCRONIZAR CAPACITOR
+      # ============================================================
       - name: Sincronizar Capacitor
         shell: bash
         run: |
@@ -201,6 +269,10 @@ jobs:
 
           npx cap sync android
 
+
+      # ============================================================
+      # 14. CRIAR PERMISSION BRIDGE
+      # ============================================================
       - name: Criar PermissionBridge
         shell: bash
         run: |
@@ -256,10 +328,8 @@ jobs:
                 == PermissionState.GRANTED
               ) {
                 JSObject result = new JSObject();
-
                 result.put("granted", true);
                 result.put("state", "granted");
-
                 call.resolve(result);
                 return;
               }
@@ -275,6 +345,7 @@ jobs:
             private void contactsPermissionResult(
               PluginCall call
             ) {
+
               boolean granted =
                 getPermissionState("contacts")
                 == PermissionState.GRANTED;
@@ -298,10 +369,8 @@ jobs:
                 == PermissionState.GRANTED
               ) {
                 JSObject result = new JSObject();
-
                 result.put("granted", true);
                 result.put("state", "granted");
-
                 call.resolve(result);
                 return;
               }
@@ -317,6 +386,7 @@ jobs:
             private void microphonePermissionResult(
               PluginCall call
             ) {
+
               boolean granted =
                 getPermissionState("microphone")
                 == PermissionState.GRANTED;
@@ -336,6 +406,7 @@ jobs:
             public void getPermissionStates(
               PluginCall call
             ) {
+
               JSObject result = new JSObject();
 
               result.put(
@@ -355,6 +426,7 @@ jobs:
             public void openSettings(
               PluginCall call
             ) {
+
               try {
 
                 Intent intent =
@@ -384,7 +456,11 @@ jobs:
           }
           JAVA
 
-      - name: Registrar PermissionBridge
+
+      # ============================================================
+      # 15. MAIN ACTIVITY
+      # ============================================================
+      - name: Configurar MainActivity
         shell: bash
         run: |
           set -e
@@ -394,6 +470,7 @@ jobs:
           cat > "$MAIN" <<'JAVA'
           package com.sacerdotisaaime.gestao;
 
+          import android.content.Intent;
           import android.os.Bundle;
 
           import com.getcapacitor.BridgeActivity;
@@ -404,15 +481,237 @@ jobs:
             public void onCreate(
               Bundle savedInstanceState
             ) {
+
               registerPlugin(
                 PermissionBridgePlugin.class
               );
 
               super.onCreate(savedInstanceState);
             }
+
+            @Override
+            public void onNewIntent(Intent intent) {
+
+              super.onNewIntent(intent);
+
+              setIntent(intent);
+            }
           }
           JAVA
 
+
+      # ============================================================
+      # 16. CONFIGURAR MANIFEST PARA RECEBER COMPARTILHAMENTO
+      # ============================================================
+      - name: Configurar Android para receber áudio do WhatsApp
+        shell: bash
+        run: |
+          set -e
+
+          MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
+
+          test -f "$MANIFEST" || {
+            echo "ERRO: AndroidManifest.xml não encontrado."
+            exit 1
+          }
+
+          python3 - "$MANIFEST" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+
+          text = path.read_text()
+
+          # --------------------------------------------------------
+          # Encontrar MainActivity
+          # --------------------------------------------------------
+
+          patterns = [
+              r'<activity\b[^>]*android:name="[^"]*\.MainActivity"[^>]*>',
+              r'<activity\b[^>]*android:name="com\.sacerdotisaaime\.gestao\.MainActivity"[^>]*>',
+              r'<activity\b[^>]*android:name="MainActivity"[^>]*>',
+          ]
+
+          match = None
+
+          for pattern in patterns:
+              match = re.search(
+                  pattern,
+                  text,
+                  flags=re.IGNORECASE
+              )
+
+              if match:
+                  break
+
+          if not match:
+              raise SystemExit(
+                  "ERRO: MainActivity não encontrada no Manifest."
+              )
+
+          activity_start = match.start()
+          activity_tag_end = match.end()
+
+          activity_open = text[activity_start:activity_tag_end]
+
+          # --------------------------------------------------------
+          # Android 12+
+          # --------------------------------------------------------
+
+          if "android:exported=" not in activity_open:
+              activity_open = activity_open[:-1] + \
+                  ' android:exported="true">'
+
+          else:
+              activity_open = re.sub(
+                  r'android:exported="[^"]*"',
+                  'android:exported="true"',
+                  activity_open
+              )
+
+          # --------------------------------------------------------
+          # Manter a Activity única para receber novos intents
+          # --------------------------------------------------------
+
+          if "android:launchMode=" not in activity_open:
+              activity_open = activity_open[:-1] + \
+                  ' android:launchMode="singleTop">'
+
+          else:
+              activity_open = re.sub(
+                  r'android:launchMode="[^"]*"',
+                  'android:launchMode="singleTop"',
+                  activity_open
+              )
+
+          text = (
+              text[:activity_start] +
+              activity_open +
+              text[activity_tag_end:]
+          )
+
+          # Recalcular MainActivity
+          match = None
+
+          for pattern in patterns:
+              match = re.search(
+                  pattern,
+                  text,
+                  flags=re.IGNORECASE
+              )
+
+              if match:
+                  break
+
+          if not match:
+              raise SystemExit(
+                  "ERRO: não foi possível localizar novamente a MainActivity."
+              )
+
+          start = match.end()
+
+          # Encontrar o fechamento correspondente da Activity.
+          # O Manifest criado pelo Capacitor normalmente possui
+          # somente uma MainActivity.
+          close = text.find(
+              "</activity>",
+              start
+          )
+
+          if close < 0:
+              raise SystemExit(
+                  "ERRO: fechamento da MainActivity não encontrado."
+              )
+
+          # --------------------------------------------------------
+          # Filtros de compartilhamento
+          # --------------------------------------------------------
+
+          filters = r'''
+              <!-- Gestão Sacerdotista Aimê - receber áudio -->
+              <intent-filter>
+                  <action android:name="android.intent.action.SEND" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <data android:mimeType="audio/*" />
+              </intent-filter>
+
+              <intent-filter>
+                  <action android:name="android.intent.action.SEND_MULTIPLE" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <data android:mimeType="audio/*" />
+              </intent-filter>
+
+              <!--
+                Alguns aplicativos/Samsung podem compartilhar o arquivo
+                com MIME genérico. Este filtro garante que o aplicativo
+                também apareça nesses casos.
+              -->
+              <intent-filter>
+                  <action android:name="android.intent.action.SEND" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <data android:mimeType="*/*" />
+              </intent-filter>
+          '''
+
+          # Remover filtros que já tenham sido adicionados
+          # por alguma etapa anterior.
+          existing_start = text.find(
+              "<!-- Gestão Sacerdotista Aimê - receber áudio -->"
+          )
+
+          if existing_start >= 0:
+
+              existing_end = text.find(
+                  "</intent-filter>",
+                  existing_start
+              )
+
+              # Remove somente até o último filtro conhecido.
+              # Mais seguro reconstruir pelos marcadores abaixo.
+              while existing_start >= 0:
+
+                  next_filter_end = text.find(
+                      "</intent-filter>",
+                      existing_start
+                  )
+
+                  if next_filter_end < 0:
+                      break
+
+                  next_filter_end += len(
+                      "</intent-filter>"
+                  )
+
+                  block = text[
+                      existing_start:next_filter_end
+                  ]
+
+                  text = text.replace(
+                      block,
+                      "",
+                      1
+                  )
+
+                  existing_start = text.find(
+                      "<!-- Gestão Sacerdotista Aimê - receber áudio -->"
+                  )
+
+          text = (
+              text[:close] +
+              filters +
+              "\n        " +
+              text[close:]
+          )
+
+          path.write_text(text)
+          PY
+
+
+      # ============================================================
+      # 17. PERMISSÕES
+      # ============================================================
       - name: Declarar permissões Android
         shell: bash
         run: |
@@ -425,6 +724,7 @@ jobs:
           import sys
 
           manifest = Path(sys.argv[1])
+
           text = manifest.read_text()
 
           permissions = [
@@ -444,16 +744,17 @@ jobs:
           additions = []
 
           for permission in permissions:
+
               if (
                   f'android:name="{permission}"'
                   not in text
               ):
                   additions.append(
-                      f'    <uses-permission '
-                      f'android:name="{permission}" />\n'
+                      f'    <uses-permission android:name="{permission}" />\n'
                   )
 
           if additions:
+
               text = text.replace(
                   marker,
                   "".join(additions) + marker,
@@ -463,6 +764,97 @@ jobs:
           manifest.write_text(text)
           PY
 
+
+      # ============================================================
+      # 18. VALIDAR MANIFEST ANTES DO BUILD
+      # ============================================================
+      - name: Validar receptor de áudio no Manifest
+        shell: bash
+        run: |
+          set -e
+
+          MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
+
+          echo "=== VERIFICANDO ACTION_SEND ==="
+
+          grep -q \
+            'android.intent.action.SEND' \
+            "$MANIFEST" || {
+              echo "ERRO: ACTION_SEND não encontrado."
+              exit 1
+            }
+
+          echo "OK: ACTION_SEND"
+
+
+          echo "=== VERIFICANDO SEND_MULTIPLE ==="
+
+          grep -q \
+            'android.intent.action.SEND_MULTIPLE' \
+            "$MANIFEST" || {
+              echo "ERRO: SEND_MULTIPLE não encontrado."
+              exit 1
+            }
+
+          echo "OK: SEND_MULTIPLE"
+
+
+          echo "=== VERIFICANDO audio/* ==="
+
+          grep -q \
+            'android:mimeType="audio/\*"' \
+            "$MANIFEST" || {
+              echo "ERRO: audio/* não encontrado."
+              exit 1
+            }
+
+          echo "OK: audio/*"
+
+
+          echo "=== VERIFICANDO */* ==="
+
+          grep -q \
+            'android:mimeType="\*/\*"' \
+            "$MANIFEST" || {
+              echo "ERRO: */* não encontrado."
+              exit 1
+            }
+
+          echo "OK: */*"
+
+
+          echo "=== VERIFICANDO DEFAULT ==="
+
+          grep -q \
+            'android.intent.category.DEFAULT' \
+            "$MANIFEST" || {
+              echo "ERRO: CATEGORY_DEFAULT não encontrado."
+              exit 1
+            }
+
+          echo "OK: CATEGORY_DEFAULT"
+
+
+          echo "=== VERIFICANDO EXPORTED ==="
+
+          grep -q \
+            'android:exported="true"' \
+            "$MANIFEST" || {
+              echo "ERRO: exported=true não encontrado."
+              exit 1
+            }
+
+          echo "OK: exported=true"
+
+
+          echo "=== MANIFEST FINAL ==="
+
+          cat "$MANIFEST"
+
+
+      # ============================================================
+      # 19. KEYSTORE
+      # ============================================================
       - name: Preparar keystore
         shell: bash
         env:
@@ -472,7 +864,8 @@ jobs:
 
           KEYSTORE="$PROJECT_DIR/android/app/release-key.jks"
 
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" \
+          printf '%s' \
+            "$ANDROID_KEYSTORE_BASE64" \
             | base64 --decode > "$KEYSTORE"
 
           test -s "$KEYSTORE"
@@ -481,6 +874,10 @@ jobs:
 
           echo "Keystore preparada."
 
+
+      # ============================================================
+      # 20. VERSÃO + ASSINATURA
+      # ============================================================
       - name: Configurar versão e assinatura
         shell: bash
         env:
@@ -503,108 +900,136 @@ jobs:
           import sys
 
           path = Path(sys.argv[1])
+
           text = path.read_text()
 
+          # V114
           text = re.sub(
               r'versionName\s+"[^"]+"',
-              'versionName "1.11.0"',
+              'versionName "1.14.0"',
               text,
               count=1
           )
 
           text = re.sub(
               r'versionCode\s+\d+',
-              'versionCode 111',
+              'versionCode 114',
               text,
               count=1
           )
 
-          signing_block = """
-              release {
-                  storeFile file("release-key.jks")
-                  storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                  keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                  keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-              }
-          """
+          # --------------------------------------------------------
+          # Signing
+          # --------------------------------------------------------
 
-          if "signingConfigs {" not in text:
+          if 'signingConfigs {' not in text:
 
-              text = text.replace(
-                  "android {",
-                  """android {
+              signing = '''
               signingConfigs {
-          """ + signing_block + """
+                  release {
+                      storeFile file("release-key.jks")
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
               }
-          """,
-                  1
-              )
-
-          elif "signingConfigs.release" not in text:
+              '''
 
               text = text.replace(
-                  "signingConfigs {",
-                  """signingConfigs {
-          """ + signing_block,
+                  'android {',
+                  'android {' + signing,
                   1
               )
 
-          if "buildTypes {" not in text:
+          elif 'signingConfigs.release' not in text:
 
-              text += """
-          buildTypes {
-              release {
-                  signingConfig signingConfigs.release
-                  minifyEnabled false
+              text = text.replace(
+                  'signingConfigs {',
+                  '''signingConfigs {
+                  release {
+                      storeFile file("release-key.jks")
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              ''',
+                  1
+              )
+
+          # --------------------------------------------------------
+          # Release build type
+          # --------------------------------------------------------
+
+          build_types = re.search(
+              r'buildTypes\s*\{',
+              text
+          )
+
+          if not build_types:
+
+              text += '''
+              
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                  }
               }
-          }
-          """
+              '''
 
           else:
 
-              build_types_pos = text.find(
-                  "buildTypes {"
-              )
-
-              after_build_types = text[
-                  build_types_pos:
+              tail = text[
+                  build_types.end():
               ]
 
-              if "release {" not in after_build_types:
+              release = re.search(
+                  r'release\s*\{',
+                  tail
+              )
 
-                  text += """
-          buildTypes {
-              release {
-                  signingConfig signingConfigs.release
-                  minifyEnabled false
-              }
-          }
-          """
+              if not release:
+
+                  pos = build_types.end()
+
+                  text = (
+                      text[:pos] +
+                      '''
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                  }
+                      ''' +
+                      text[pos:]
+                  )
 
               elif (
-                  "signingConfig signingConfigs.release"
-                  not in after_build_types
+                  'signingConfig signingConfigs.release'
+                  not in tail[
+                      release.end():
+                      release.end() + 2500
+                  ]
               ):
 
-                  release_pos = (
-                      build_types_pos
-                      + after_build_types.find(
-                          "release {"
-                      )
-                      + len("release {")
+                  pos = (
+                      build_types.end() +
+                      release.end()
                   )
 
                   text = (
-                      text[:release_pos]
-                      + """
-                  signingConfig signingConfigs.release
-                  minifyEnabled false
-          """
-                      + text[release_pos:]
+                      text[:pos] +
+                      '''
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                      ''' +
+                      text[pos:]
                   )
 
           path.write_text(text)
           PY
+
+
+          # Validar keystore
 
           keytool -list \
             -keystore "$PROJECT_DIR/android/app/release-key.jks" \
@@ -614,7 +1039,11 @@ jobs:
 
           echo "Keystore e alias validados."
 
-      - name: Validar Manifest
+
+      # ============================================================
+      # 21. VALIDAR PERMISSÕES
+      # ============================================================
+      - name: Validar permissões
         shell: bash
         run: |
           set -e
@@ -639,6 +1068,10 @@ jobs:
 
           done
 
+
+      # ============================================================
+      # 22. GERAR APK RELEASE
+      # ============================================================
       - name: Gerar APK RELEASE
         shell: bash
         env:
@@ -649,17 +1082,17 @@ jobs:
           set -e
 
           test -n "$ANDROID_KEYSTORE_PASSWORD" || {
-            echo "ERRO: ANDROID_KEYSTORE_PASSWORD não chegou ao Gradle."
+            echo "ERRO: senha do keystore não chegou."
             exit 1
           }
 
           test -n "$ANDROID_KEY_ALIAS" || {
-            echo "ERRO: ANDROID_KEY_ALIAS não chegou ao Gradle."
+            echo "ERRO: alias não chegou."
             exit 1
           }
 
           test -n "$ANDROID_KEY_PASSWORD" || {
-            echo "ERRO: ANDROID_KEY_PASSWORD não chegou ao Gradle."
+            echo "ERRO: senha da chave não chegou."
             exit 1
           }
 
@@ -669,6 +1102,10 @@ jobs:
 
           ./gradlew assembleRelease --no-daemon
 
+
+      # ============================================================
+      # 23. LOCALIZAR APK
+      # ============================================================
       - name: Localizar APK final
         shell: bash
         run: |
@@ -677,7 +1114,8 @@ jobs:
           APK="$PROJECT_DIR/android/app/build/outputs/apk/release/app-release.apk"
 
           if [ ! -f "$APK" ]; then
-            echo "ERRO: APK release não encontrado."
+
+            echo "ERRO: APK não encontrado."
 
             find "$PROJECT_DIR/android" \
               -type f \
@@ -691,6 +1129,10 @@ jobs:
 
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
+
+      # ============================================================
+      # 24. VALIDAR PERMISSÕES NO APK
+      # ============================================================
       - name: Validar permissões do APK
         shell: bash
         run: |
@@ -698,11 +1140,13 @@ jobs:
 
           APK="$APK_PATH"
 
-          AAPT=$(find "$ANDROID_HOME/build-tools" \
-            -type f \
-            -name aapt \
-            | sort -V \
-            | tail -n 1)
+          AAPT=$(
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name aapt \
+              | sort -V \
+              | tail -n 1
+          )
 
           test -n "$AAPT" || {
             echo "ERRO: aapt não encontrado."
@@ -733,6 +1177,105 @@ jobs:
 
           done
 
+
+      # ============================================================
+      # 25. VALIDAR INTENT FILTER DENTRO DO APK
+      # ============================================================
+      - name: VALIDAR RECEPÇÃO DE ÁUDIO DENTRO DO APK
+        shell: bash
+        run: |
+          set -e
+
+          APK="$APK_PATH"
+
+          AAPT=$(
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name aapt \
+              | sort -V \
+              | tail -n 1
+          )
+
+          test -n "$AAPT" || {
+            echo "ERRO: aapt não encontrado."
+            exit 1
+          }
+
+          echo "======================================"
+          echo "MANIFEST DO APK FINAL"
+          echo "======================================"
+
+          "$AAPT" dump xmltree \
+            "$APK" \
+            AndroidManifest.xml \
+            | tee /tmp/final-manifest.txt
+
+          echo ""
+          echo "======================================"
+          echo "VALIDANDO ACTION_SEND"
+          echo "======================================"
+
+          grep -q \
+            "android.intent.action.SEND" \
+            /tmp/final-manifest.txt || {
+
+            echo "ERRO CRÍTICO:"
+            echo "ACTION_SEND NÃO entrou no APK final."
+
+            exit 1
+          }
+
+          echo "OK: ACTION_SEND presente."
+
+
+          echo ""
+          echo "======================================"
+          echo "VALIDANDO SEND_MULTIPLE"
+          echo "======================================"
+
+          grep -q \
+            "android.intent.action.SEND_MULTIPLE" \
+            /tmp/final-manifest.txt || {
+
+            echo "ERRO CRÍTICO:"
+            echo "SEND_MULTIPLE NÃO entrou no APK final."
+
+            exit 1
+          }
+
+          echo "OK: SEND_MULTIPLE presente."
+
+
+          echo ""
+          echo "======================================"
+          echo "VALIDANDO MIME AUDIO"
+          echo "======================================"
+
+          grep -q \
+            "audio/\*" \
+            /tmp/final-manifest.txt || {
+
+            echo "ERRO CRÍTICO:"
+            echo "audio/* NÃO entrou no APK final."
+
+            exit 1
+          }
+
+          echo "OK: audio/* presente."
+
+
+          echo ""
+          echo "======================================"
+          echo "VALIDAÇÃO FINAL DO COMPARTILHAMENTO"
+          echo "======================================"
+
+          echo "O APK final está registrado como receptor"
+          echo "de compartilhamento de áudio."
+
+
+      # ============================================================
+      # 26. VALIDAR ASSINATURA
+      # ============================================================
       - name: Validar assinatura do APK
         shell: bash
         run: |
@@ -740,11 +1283,13 @@ jobs:
 
           APK="$APK_PATH"
 
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
-            -type f \
-            -name apksigner \
-            | sort -V \
-            | tail -n 1)
+          APKSIGNER=$(
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name apksigner \
+              | sort -V \
+              | tail -n 1
+          )
 
           test -n "$APKSIGNER" || {
             echo "ERRO: apksigner não encontrado."
@@ -755,14 +1300,22 @@ jobs:
             --verbose \
             "$APK"
 
+
+      # ============================================================
+      # 27. DISPONIBILIZAR APK
+      # ============================================================
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
-          name: gestao-sacerdotista-aime-release-apk
+          name: gestao-sacerdotista-aime-v114-audio-share
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
           retention-days: 1
 
+
+      # ============================================================
+      # 28. LIMPAR KEYSTORE
+      # ============================================================
       - name: Limpar arquivo temporário de assinatura
         if: always()
         shell: bash
