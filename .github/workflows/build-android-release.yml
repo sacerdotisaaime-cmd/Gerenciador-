@@ -77,7 +77,6 @@ jobs:
 
           if [ "$COUNT" -gt 1 ]; then
             echo "ERRO: foram encontrados vários ZIPs."
-            echo "Deixe somente o ZIP da versão que será compilada."
             printf '%s\n' "${ZIPS[@]}"
             exit 1
           fi
@@ -252,9 +251,10 @@ jobs:
             @PluginMethod
             public void requestContacts(PluginCall call) {
 
-              if (getPermissionState("contacts")
-                  == PermissionState.GRANTED) {
-
+              if (
+                getPermissionState("contacts")
+                == PermissionState.GRANTED
+              ) {
                 JSObject result = new JSObject();
 
                 result.put("granted", true);
@@ -272,8 +272,9 @@ jobs:
             }
 
             @PermissionCallback
-            private void contactsPermissionResult(PluginCall call) {
-
+            private void contactsPermissionResult(
+              PluginCall call
+            ) {
               boolean granted =
                 getPermissionState("contacts")
                 == PermissionState.GRANTED;
@@ -292,9 +293,10 @@ jobs:
             @PluginMethod
             public void requestMicrophone(PluginCall call) {
 
-              if (getPermissionState("microphone")
-                  == PermissionState.GRANTED) {
-
+              if (
+                getPermissionState("microphone")
+                == PermissionState.GRANTED
+              ) {
                 JSObject result = new JSObject();
 
                 result.put("granted", true);
@@ -315,7 +317,6 @@ jobs:
             private void microphonePermissionResult(
               PluginCall call
             ) {
-
               boolean granted =
                 getPermissionState("microphone")
                 == PermissionState.GRANTED;
@@ -332,8 +333,9 @@ jobs:
             }
 
             @PluginMethod
-            public void getPermissionStates(PluginCall call) {
-
+            public void getPermissionStates(
+              PluginCall call
+            ) {
               JSObject result = new JSObject();
 
               result.put(
@@ -350,8 +352,9 @@ jobs:
             }
 
             @PluginMethod
-            public void openSettings(PluginCall call) {
-
+            public void openSettings(
+              PluginCall call
+            ) {
               try {
 
                 Intent intent =
@@ -398,8 +401,9 @@ jobs:
           public class MainActivity extends BridgeActivity {
 
             @Override
-            public void onCreate(Bundle savedInstanceState) {
-
+            public void onCreate(
+              Bundle savedInstanceState
+            ) {
               registerPlugin(
                 PermissionBridgePlugin.class
               );
@@ -440,16 +444,16 @@ jobs:
           additions = []
 
           for permission in permissions:
-
-              if f'android:name="{permission}"' not in text:
-
+              if (
+                  f'android:name="{permission}"'
+                  not in text
+              ):
                   additions.append(
                       f'    <uses-permission '
                       f'android:name="{permission}" />\n'
                   )
 
           if additions:
-
               text = text.replace(
                   marker,
                   "".join(additions) + marker,
@@ -501,7 +505,6 @@ jobs:
           path = Path(sys.argv[1])
           text = path.read_text()
 
-          # Versão da V111
           text = re.sub(
               r'versionName\s+"[^"]+"',
               'versionName "1.11.0"',
@@ -516,156 +519,93 @@ jobs:
               count=1
           )
 
-          # Criar signingConfigs se ainda não existir.
-          if 'signingConfigs {' not in text:
-
-              signing = '''
-              signingConfigs {
-                  release {
-                      storeFile file("release-key.jks")
-                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-                  }
+          signing_block = """
+              release {
+                  storeFile file("release-key.jks")
+                  storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                  keyPassword System.getenv("ANDROID_KEY_PASSWORD")
               }
-              '''
+          """
+
+          if "signingConfigs {" not in text:
 
               text = text.replace(
-                  'android {',
-                  'android {' + signing,
+                  "android {",
+                  """android {
+              signingConfigs {
+          """ + signing_block + """
+              }
+          """,
                   1
               )
 
-          # Se signingConfigs existir, garantir release dentro dele.
+          elif "signingConfigs.release" not in text:
+
+              text = text.replace(
+                  "signingConfigs {",
+                  """signingConfigs {
+          """ + signing_block,
+                  1
+              )
+
+          if "buildTypes {" not in text:
+
+              text += """
+          buildTypes {
+              release {
+                  signingConfig signingConfigs.release
+                  minifyEnabled false
+              }
+          }
+          """
+
           else:
 
-              signing_start = text.find(
-                  'signingConfigs {'
+              build_types_pos = text.find(
+                  "buildTypes {"
               )
 
-              signing_end = text.find(
-                  '\n    }',
-                  signing_start
-              )
-
-              signing_section = text[
-                  signing_start:
-                  signing_end + 6
-                  if signing_end != -1
-                  else len(text)
+              after_build_types = text[
+                  build_types_pos:
               ]
 
-              if 'release {' not in signing_section:
+              if "release {" not in after_build_types:
 
-                  release_block = '''
-                  release {
-                      storeFile file("release-key.jks")
-                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-                  }
-                  '''
-
-                  insert_at = signing_start + len(
-                      'signingConfigs {'
-                  )
-
-                  text = (
-                      text[:insert_at]
-                      + release_block
-                      + text[insert_at:]
-                  )
-
-          # Garantir buildTypes.release com assinatura.
-          build_types = re.search(
-              r'buildTypes\s*\{',
-              text
-          )
-
-          if not build_types:
-
-              text += '''
-              
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                  }
+                  text += """
+          buildTypes {
+              release {
+                  signingConfig signingConfigs.release
+                  minifyEnabled false
               }
-              '''
+          }
+          """
 
-          else:
+              elif (
+                  "signingConfig signingConfigs.release"
+                  not in after_build_types
+              ):
 
-              tail = text[build_types.end():]
-
-              release_match = re.search(
-                  r'release\s*\{',
-                  tail
-              )
-
-              if not release_match:
-
-                  insert_at = build_types.end()
+                  release_pos = (
+                      build_types_pos
+                      + after_build_types.find(
+                          "release {"
+                      )
+                      + len("release {")
+                  )
 
                   text = (
-                      text[:insert_at]
-                      + '''
-                  release {
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                  }
-                  '''
-                      + text[insert_at:]
+                      text[:release_pos]
+                      + """
+                  signingConfig signingConfigs.release
+                  minifyEnabled false
+          """
+                      + text[release_pos:]
                   )
-
-              else:
-
-                  release_start = (
-                      build_types.end()
-                      + release_match.start()
-                  )
-
-                  release_end = text.find(
-                      '\n        }',
-                      release_start
-                  )
-
-                  if release_end == -1:
-                      release_end = min(
-                          release_start + 3000,
-                          len(text)
-                      )
-
-                  release_section = text[
-                      release_start:
-                      release_end
-                  ]
-
-                  if (
-                      'signingConfig signingConfigs.release'
-                      not in release_section
-                  ):
-
-                      insert_at = (
-                          build_types.end()
-                          + release_match.end()
-                      )
-
-                      text = (
-                          text[:insert_at]
-                          + '''
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                  '''
-                          + text[insert_at:]
-                      )
 
           path.write_text(text)
           PY
 
-          # IMPORTANTE:
-          # o keystore está em android/app/,
-          # exatamente onde o build.gradle procura release-key.jks.
           keytool -list \
             -keystore "$PROJECT_DIR/android/app/release-key.jks" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
@@ -701,8 +641,27 @@ jobs:
 
       - name: Gerar APK RELEASE
         shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -e
+
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || {
+            echo "ERRO: ANDROID_KEYSTORE_PASSWORD não chegou ao Gradle."
+            exit 1
+          }
+
+          test -n "$ANDROID_KEY_ALIAS" || {
+            echo "ERRO: ANDROID_KEY_ALIAS não chegou ao Gradle."
+            exit 1
+          }
+
+          test -n "$ANDROID_KEY_PASSWORD" || {
+            echo "ERRO: ANDROID_KEY_PASSWORD não chegou ao Gradle."
+            exit 1
+          }
 
           cd "$PROJECT_DIR/android"
 
@@ -718,7 +677,6 @@ jobs:
           APK="$PROJECT_DIR/android/app/build/outputs/apk/release/app-release.apk"
 
           if [ ! -f "$APK" ]; then
-
             echo "ERRO: APK release não encontrado."
 
             find "$PROJECT_DIR/android" \
