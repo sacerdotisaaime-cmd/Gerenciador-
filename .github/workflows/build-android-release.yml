@@ -1,1 +1,453 @@
+name: Build Android APK - RELEASE
 
+on:
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configurar Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Validar secrets de assinatura
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo "ERRO: ANDROID_KEYSTORE_BASE64 vazio"; exit 1; }
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo "ERRO: ANDROID_KEYSTORE_PASSWORD vazio"; exit 1; }
+          test -n "$ANDROID_KEY_ALIAS" || { echo "ERRO: ANDROID_KEY_ALIAS vazio"; exit 1; }
+          test -n "$ANDROID_KEY_PASSWORD" || { echo "ERRO: ANDROID_KEY_PASSWORD vazio"; exit 1; }
+          echo "Secrets de assinatura reconhecidas."
+
+      - name: Encontrar ZIP do projeto
+        shell: bash
+        run: |
+          set -e
+          mapfile -t ZIPS < <(find . -maxdepth 2 -type f -iname "*.zip" ! -path "./.git/*" | sort)
+          COUNT="${#ZIPS[@]}"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "ERRO: nenhum ZIP foi encontrado."
+            exit 1
+          fi
+          if [ "$COUNT" -gt 1 ]; then
+            echo "ERRO: foram encontrados vários ZIPs. Deixe somente o ZIP da versão que será compilada."
+            printf '%s\n' "${ZIPS[@]}"
+            exit 1
+          fi
+          ZIP_FILE="${ZIPS[0]}"
+          echo "ZIP selecionado: $ZIP_FILE"
+          ls -lh "$ZIP_FILE"
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+
+      - name: Descompactar projeto
+        shell: bash
+        run: |
+          set -e
+          rm -rf app
+          mkdir -p app
+          unzip -q "$ZIP_FILE" -d app
+
+      - name: Localizar projeto
+        shell: bash
+        run: |
+          set -e
+          PROJECT_PACKAGE=$(find app -name package.json -not -path "*/node_modules/*" -print | head -n 1)
+          if [ -z "$PROJECT_PACKAGE" ]; then
+            echo "ERRO: package.json não encontrado."
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$PROJECT_PACKAGE")
+          echo "Projeto: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Ajustar dependências
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const deps = pkg.dependencies || (pkg.dependencies = {});
+          deps['@capacitor/core'] = '^7.4.3';
+          deps['@capacitor/android'] = '^7.4.3';
+          deps['@capacitor/camera'] = '^7.0.5';
+          deps['@capacitor/share'] = '^7.0.2';
+          deps['@capacitor/filesystem'] = '^7.0.2';
+          deps['@capacitor-community/contacts'] = '7.2.0';
+          deps['capacitor-voice-recorder'] = '7.0.6';
+          deps['@capacitor/barcode-scanner'] = '2.0.4';
+          fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+          rm -rf node_modules
+          rm -f package-lock.json
+
+      - name: Instalar dependências
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          npm install
+          npm install -D @capacitor/cli@7.4.3
+
+      - name: Compilar aplicação web
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          npx vite build
+
+      - name: Adicionar Android
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          npx cap add android
+
+      - name: Ajustar SDK Android
+        shell: bash
+        run: |
+          set -e
+          VARIABLES="$PROJECT_DIR/android/variables.gradle"
+          if [ -f "$VARIABLES" ]; then
+            sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 26/' "$VARIABLES"
+          fi
+
+      - name: Sincronizar Capacitor
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          npx cap sync android
+
+      - name: Criar PermissionBridge
+        shell: bash
+        run: |
+          set -e
+          ANDROID_SRC="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao"
+          mkdir -p "$ANDROID_SRC"
+          cat > "$ANDROID_SRC/PermissionBridgePlugin.java" <<'JAVA'
+          package com.sacerdotisaaime.gestao;
+
+          import android.Manifest;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.provider.Settings;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.PermissionState;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          import com.getcapacitor.annotation.Permission;
+          import com.getcapacitor.annotation.PermissionCallback;
+
+          @CapacitorPlugin(
+            name = "PermissionBridge",
+            permissions = {
+              @Permission(alias = "contacts", strings = {
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.WRITE_CONTACTS
+              }),
+              @Permission(alias = "microphone", strings = {
+                Manifest.permission.RECORD_AUDIO
+              })
+            }
+          )
+          public class PermissionBridgePlugin extends Plugin {
+            @PluginMethod
+            public void requestContacts(PluginCall call) {
+              if (getPermissionState("contacts") == PermissionState.GRANTED) {
+                JSObject result = new JSObject();
+                result.put("granted", true);
+                result.put("state", "granted");
+                call.resolve(result);
+                return;
+              }
+              requestPermissionForAlias("contacts", call, "contactsPermissionResult");
+            }
+
+            @PermissionCallback
+            private void contactsPermissionResult(PluginCall call) {
+              boolean granted = getPermissionState("contacts") == PermissionState.GRANTED;
+              JSObject result = new JSObject();
+              result.put("granted", granted);
+              result.put("state", granted ? "granted" : "denied");
+              call.resolve(result);
+            }
+
+            @PluginMethod
+            public void requestMicrophone(PluginCall call) {
+              if (getPermissionState("microphone") == PermissionState.GRANTED) {
+                JSObject result = new JSObject();
+                result.put("granted", true);
+                result.put("state", "granted");
+                call.resolve(result);
+                return;
+              }
+              requestPermissionForAlias("microphone", call, "microphonePermissionResult");
+            }
+
+            @PermissionCallback
+            private void microphonePermissionResult(PluginCall call) {
+              boolean granted = getPermissionState("microphone") == PermissionState.GRANTED;
+              JSObject result = new JSObject();
+              result.put("granted", granted);
+              result.put("state", granted ? "granted" : "denied");
+              call.resolve(result);
+            }
+
+            @PluginMethod
+            public void getPermissionStates(PluginCall call) {
+              JSObject result = new JSObject();
+              result.put("contacts", getPermissionState("contacts").toString());
+              result.put("microphone", getPermissionState("microphone").toString());
+              call.resolve(result);
+            }
+
+            @PluginMethod
+            public void openSettings(PluginCall call) {
+              try {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                getActivity().startActivity(intent);
+                call.resolve();
+              } catch (Exception ex) {
+                call.reject("SETTINGS_ERROR", ex.getMessage());
+              }
+            }
+          }
+          JAVA
+
+      - name: Registrar PermissionBridge
+        shell: bash
+        run: |
+          set -e
+          MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
+          cat > "$MAIN" <<'JAVA'
+          package com.sacerdotisaaime.gestao;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              registerPlugin(PermissionBridgePlugin.class);
+              super.onCreate(savedInstanceState);
+            }
+          }
+          JAVA
+
+      - name: Declarar permissões Android
+        shell: bash
+        run: |
+          set -e
+          MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
+          python3 - "$MANIFEST" <<'PY'
+          from pathlib import Path
+          import sys
+
+          manifest = Path(sys.argv[1])
+          text = manifest.read_text()
+          permissions = [
+              "android.permission.READ_CONTACTS",
+              "android.permission.WRITE_CONTACTS",
+              "android.permission.RECORD_AUDIO",
+              "android.permission.CAMERA",
+          ]
+          marker = "<application"
+          if marker not in text:
+              raise SystemExit("ERRO: <application> não encontrado.")
+          additions = []
+          for permission in permissions:
+              if f'android:name="{permission}"' not in text:
+                  additions.append(f'    <uses-permission android:name="{permission}" />\n')
+          if additions:
+              text = text.replace(marker, "".join(additions) + marker, 1)
+          manifest.write_text(text)
+          PY
+
+      - name: Preparar keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -e
+          KEYSTORE="$PROJECT_DIR/android/release-key.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "Keystore preparada."
+
+      - name: Configurar versão e assinatura
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          APP_GRADLE="$PROJECT_DIR/android/app/build.gradle"
+          test -f "$APP_GRADLE" || { echo "ERRO: build.gradle não encontrado."; exit 1; }
+
+          python3 - "$APP_GRADLE" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.11.0"', text, count=1)
+          text = re.sub(r'versionCode\s+\d+', 'versionCode 111', text, count=1)
+
+          if 'signingConfigs {' not in text:
+              signing = '''
+              signingConfigs {
+                  release {
+                      storeFile file("release-key.jks")
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              }
+              '''
+              text = text.replace('android {', 'android {' + signing, 1)
+          elif 'signingConfigs.release' not in text:
+              text = text.replace('signingConfigs {', '''signingConfigs {
+                  release {
+                      storeFile file("release-key.jks")
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              ''', 1)
+
+          build_types = re.search(r'buildTypes\s*\{', text)
+          if not build_types:
+              text += '''
+              \nbuildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                  }
+              }
+              '''
+          else:
+              tail = text[build_types.end():]
+              release = re.search(r'release\s*\{', tail)
+              if not release:
+                  pos = build_types.end()
+                  text = text[:pos] + '''
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                  }
+                  ''' + text[pos:]
+              elif 'signingConfig signingConfigs.release' not in tail[release.end():release.end()+2500]:
+                  pos = build_types.end() + release.end()
+                  text = text[:pos] + '''
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                  ''' + text[pos:]
+
+          path.write_text(text)
+          PY
+
+          keytool -list \
+            -keystore "$PROJECT_DIR/android/release-key.jks" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+
+          echo "Keystore e alias validados."
+
+      - name: Validar Manifest
+        shell: bash
+        run: |
+          set -e
+          MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
+          for PERM in READ_CONTACTS WRITE_CONTACTS RECORD_AUDIO CAMERA; do
+            FULL="android.permission.$PERM"
+            grep -q "$FULL" "$MANIFEST" || { echo "ERRO: $FULL não está no Manifest."; exit 1; }
+            echo "OK: $FULL"
+          done
+
+      - name: Gerar APK RELEASE
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR/android"
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Localizar APK final
+        shell: bash
+        run: |
+          set -e
+          APK="$PROJECT_DIR/android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then
+            echo "ERRO: APK release não encontrado."
+            find "$PROJECT_DIR/android" -type f -name "*.apk" -print
+            exit 1
+          fi
+          ls -lh "$APK"
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+
+      - name: Validar permissões do APK
+        shell: bash
+        run: |
+          set -e
+          APK="$APK_PATH"
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          test -n "$AAPT" || { echo "ERRO: aapt não encontrado."; exit 1; }
+          "$AAPT" dump permissions "$APK" | tee /tmp/apk-permissions.txt
+          for PERM in READ_CONTACTS WRITE_CONTACTS RECORD_AUDIO CAMERA; do
+            FULL="android.permission.$PERM"
+            grep -q "$FULL" /tmp/apk-permissions.txt || { echo "ERRO: $FULL não está no APK."; exit 1; }
+            echo "OK NO APK: $FULL"
+          done
+
+      - name: Validar assinatura do APK
+        shell: bash
+        run: |
+          set -e
+          APK="$APK_PATH"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER" || { echo "ERRO: apksigner não encontrado."; exit 1; }
+          "$APKSIGNER" verify --verbose "$APK"
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gestao-sacerdotista-aime-release-apk
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Limpar arquivo temporário de assinatura
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$PROJECT_DIR/android/release-key.jks" 2>/dev/null || true
