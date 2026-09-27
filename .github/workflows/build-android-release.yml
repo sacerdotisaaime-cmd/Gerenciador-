@@ -13,18 +13,17 @@ jobs:
     steps:
 
       # ============================================================
-      # 1. CHECKOUT
+      # CHECKOUT
       # ============================================================
 
       - name: Baixar projeto
         uses: actions/checkout@v4
 
       - name: MARCADOR - V120 INICIADO
-        shell: bash
         run: |
           echo "=================================================="
-          echo " GESTÃO SACERDOTISTA AIMÊ - V120"
-          echo " WHATSAPP AUDIO SHARE"
+          echo "GESTÃO SACERDOTISTA AIMÊ - V120"
+          echo "WHATSAPP AUDIO SHARE"
           echo "=================================================="
           echo "Commit: $GITHUB_SHA"
           echo "Run: $GITHUB_RUN_NUMBER"
@@ -32,7 +31,7 @@ jobs:
 
 
       # ============================================================
-      # 2. NODE
+      # NODE
       # ============================================================
 
       - name: Configurar Node.js
@@ -42,7 +41,7 @@ jobs:
 
 
       # ============================================================
-      # 3. JAVA
+      # JAVA
       # ============================================================
 
       - name: Configurar Java
@@ -53,11 +52,10 @@ jobs:
 
 
       # ============================================================
-      # 4. SECRETS
+      # SECRETS
       # ============================================================
 
       - name: Validar secrets de assinatura
-        shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -66,78 +64,73 @@ jobs:
         run: |
           set -e
 
-          test -n "$ANDROID_KEYSTORE_BASE64" || {
-            echo "ERRO: ANDROID_KEYSTORE_BASE64 vazio"
-            exit 1
-          }
+          echo "=================================================="
+          echo "VALIDANDO SECRETS"
+          echo "=================================================="
 
-          test -n "$ANDROID_KEYSTORE_PASSWORD" || {
-            echo "ERRO: ANDROID_KEYSTORE_PASSWORD vazio"
-            exit 1
-          }
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
 
-          test -n "$ANDROID_KEY_ALIAS" || {
-            echo "ERRO: ANDROID_KEY_ALIAS vazio"
-            exit 1
-          }
-
-          test -n "$ANDROID_KEY_PASSWORD" || {
-            echo "ERRO: ANDROID_KEY_PASSWORD vazio"
-            exit 1
-          }
-
-          echo "Secrets de assinatura OK."
+          echo "Secrets de assinatura encontrados."
 
 
       # ============================================================
-      # 5. ENCONTRAR ZIP
+      # LOCALIZAR ZIP
       # ============================================================
 
       - name: Encontrar ZIP do projeto
-        shell: bash
         run: |
           set -e
 
-          mapfile -t ZIPS < <(
-            find . \
-              -maxdepth 2 \
-              -type f \
-              -iname "*.zip" \
-              ! -path "./.git/*" \
-              | sort
-          )
+          echo "=================================================="
+          echo "PROCURANDO ZIP DO PROJETO"
+          echo "=================================================="
 
-          COUNT="${#ZIPS[@]}"
+          find . \
+            -maxdepth 2 \
+            -type f \
+            -iname "*.zip" \
+            ! -path "./.git/*" \
+            -print | sort
 
-          if [ "$COUNT" -eq 0 ]; then
-            echo "ERRO: nenhum ZIP encontrado."
+          ZIP_COUNT=$(find . \
+            -maxdepth 2 \
+            -type f \
+            -iname "*.zip" \
+            ! -path "./.git/*" | wc -l)
+
+          if [ "$ZIP_COUNT" -ne 1 ]; then
+            echo "ERRO: esperado exatamente 1 ZIP."
+            echo "Quantidade encontrada: $ZIP_COUNT"
             exit 1
           fi
 
-          if [ "$COUNT" -gt 1 ]; then
-            echo "ERRO: mais de um ZIP encontrado:"
-            printf '%s\n' "${ZIPS[@]}"
-            exit 1
-          fi
-
-          ZIP_FILE="${ZIPS[0]}"
-
-          echo "ZIP:"
-          echo "$ZIP_FILE"
-
-          ls -lh "$ZIP_FILE"
+          ZIP_FILE=$(find . \
+            -maxdepth 2 \
+            -type f \
+            -iname "*.zip" \
+            ! -path "./.git/*" \
+            | head -n 1)
 
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
+          echo "ZIP selecionado:"
+          echo "$ZIP_FILE"
+
 
       # ============================================================
-      # 6. DESCOMPACTAR
+      # DESCOMPACTAR
       # ============================================================
 
       - name: Descompactar projeto
-        shell: bash
         run: |
           set -e
+
+          echo "=================================================="
+          echo "DESCOMPACTANDO PROJETO"
+          echo "=================================================="
 
           rm -rf app
           mkdir -p app
@@ -148,41 +141,41 @@ jobs:
 
 
       # ============================================================
-      # 7. LOCALIZAR PROJETO
+      # LOCALIZAR PACKAGE.JSON
       # ============================================================
 
       - name: Localizar projeto
-        shell: bash
         run: |
           set -e
 
-          PROJECT_PACKAGE=$(
-            find app \
-              -name package.json \
-              -not -path "*/node_modules/*" \
-              -print \
-              | head -n 1
-          )
+          echo "=================================================="
+          echo "LOCALIZANDO PACKAGE.JSON"
+          echo "=================================================="
 
-          if [ -z "$PROJECT_PACKAGE" ]; then
+          PACKAGE_JSON=$(find app \
+            -name package.json \
+            -not -path "*/node_modules/*" \
+            -type f \
+            | head -n 1)
+
+          if [ -z "$PACKAGE_JSON" ]; then
             echo "ERRO: package.json não encontrado."
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$PROJECT_PACKAGE")"
-
-          echo "PROJECT_DIR:"
-          echo "$PROJECT_DIR"
+          PROJECT_DIR=$(dirname "$PACKAGE_JSON")
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
+          echo "Projeto:"
+          echo "$PROJECT_DIR"
+
 
       # ============================================================
-      # 8. DEPENDÊNCIAS
+      # DEPENDÊNCIAS
       # ============================================================
 
       - name: Ajustar dependências
-        shell: bash
         run: |
           set -e
 
@@ -197,18 +190,16 @@ jobs:
             fs.readFileSync(file, "utf8")
           );
 
-          const deps =
-            pkg.dependencies ||
-            (pkg.dependencies = {});
+          pkg.dependencies = pkg.dependencies || {};
 
-          deps["@capacitor/core"] = "^7.4.3";
-          deps["@capacitor/android"] = "^7.4.3";
-          deps["@capacitor/camera"] = "^7.0.5";
-          deps["@capacitor/share"] = "^7.0.2";
-          deps["@capacitor/filesystem"] = "^7.0.2";
-          deps["@capacitor-community/contacts"] = "7.2.0";
-          deps["capacitor-voice-recorder"] = "7.0.6";
-          deps["@capacitor/barcode-scanner"] = "2.0.4";
+          pkg.dependencies["@capacitor/core"] = "^7.4.3";
+          pkg.dependencies["@capacitor/android"] = "^7.4.3";
+          pkg.dependencies["@capacitor/camera"] = "^7.0.5";
+          pkg.dependencies["@capacitor/share"] = "^7.0.2";
+          pkg.dependencies["@capacitor/filesystem"] = "^7.0.2";
+          pkg.dependencies["@capacitor-community/contacts"] = "7.2.0";
+          pkg.dependencies["capacitor-voice-recorder"] = "7.0.6";
+          pkg.dependencies["@capacitor/barcode-scanner"] = "2.0.4";
 
           fs.writeFileSync(
             file,
@@ -223,11 +214,10 @@ jobs:
 
 
       # ============================================================
-      # 9. NPM INSTALL
+      # NPM INSTALL
       # ============================================================
 
       - name: Instalar dependências
-        shell: bash
         run: |
           set -e
 
@@ -241,27 +231,27 @@ jobs:
 
 
       # ============================================================
-      # 10. BUILD WEB
+      # BUILD WEB
       # ============================================================
 
       - name: Compilar aplicação web
-        shell: bash
         run: |
           set -e
 
           cd "$PROJECT_DIR"
 
-          npx vite build
+          echo "=================================================="
+          echo "COMPILANDO APLICAÇÃO WEB"
+          echo "=================================================="
 
-          echo "Build web concluído."
+          npx vite build
 
 
       # ============================================================
-      # 11. ANDROID
+      # CAPACITOR ANDROID
       # ============================================================
 
       - name: Adicionar Android
-        shell: bash
         run: |
           set -e
 
@@ -269,15 +259,12 @@ jobs:
 
           npx cap add android
 
-          echo "Android adicionado."
-
 
       # ============================================================
-      # 12. SDK
+      # MIN SDK
       # ============================================================
 
       - name: Ajustar SDK Android
-        shell: bash
         run: |
           set -e
 
@@ -285,19 +272,18 @@ jobs:
 
           if [ -f "$VARIABLES" ]; then
             sed -i \
-              's/minSdkVersion = [0-9]*/minSdkVersion = 26/' \
+              -E 's/minSdkVersion[[:space:]]+[0-9]+/minSdkVersion 26/g' \
               "$VARIABLES"
           fi
 
-          echo "SDK Android configurado."
+          echo "minSdk configurado."
 
 
       # ============================================================
-      # 13. CAPACITOR SYNC
+      # CAP SYNC
       # ============================================================
 
       - name: Sincronizar Capacitor
-        shell: bash
         run: |
           set -e
 
@@ -305,1702 +291,1554 @@ jobs:
 
           npx cap sync android
 
-          echo "Capacitor sincronizado."
-
 
       # ============================================================
-      # 14. PERMISSION BRIDGE
+      # PERMISSION BRIDGE
       # ============================================================
 
       - name: Criar PermissionBridge
-        shell: bash
         run: |
           set -e
 
-          SRC="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao"
+          MAIN_DIR="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao"
 
-          mkdir -p "$SRC"
+          mkdir -p "$MAIN_DIR"
 
-          cat > "$SRC/PermissionBridgePlugin.java" <<'JAVA'
+          cat > "$MAIN_DIR/PermissionBridgePlugin.java" <<'JAVA'
           package com.sacerdotisaaime.gestao;
 
           import android.Manifest;
+          import android.app.Activity;
           import android.content.ClipData;
+          import android.content.ContentResolver;
+          import android.content.Context;
           import android.content.Intent;
+          import android.content.pm.PackageManager;
           import android.net.Uri;
-          import android.provider.OpenableColumns;
           import android.provider.Settings;
-          import android.util.Base64;
+          import android.util.Log;
+
+          import androidx.annotation.NonNull;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+
+          import com.getcapacitor.JSArray;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
 
           import java.io.File;
           import java.io.FileInputStream;
           import java.io.FileOutputStream;
+          import java.io.IOException;
           import java.io.InputStream;
-          import java.nio.charset.StandardCharsets;
-          import java.text.SimpleDateFormat;
+          import java.io.OutputStream;
           import java.util.ArrayList;
-          import java.util.Date;
+          import java.util.List;
           import java.util.Locale;
 
-          import com.getcapacitor.JSArray;
-          import com.getcapacitor.JSObject;
-          import com.getcapacitor.PermissionState;
-          import com.getcapacitor.Plugin;
-          import com.getcapacitor.PluginCall;
-          import com.getcapacitor.PluginMethod;
-
-          import com.getcapacitor.annotation.CapacitorPlugin;
-          import com.getcapacitor.annotation.Permission;
-          import com.getcapacitor.annotation.PermissionCallback;
-
-
           @CapacitorPlugin(
-            name = "PermissionBridge",
-            permissions = {
-              @Permission(
-                alias = "contacts",
-                strings = {
-                  Manifest.permission.READ_CONTACTS,
-                  Manifest.permission.WRITE_CONTACTS
-                }
-              ),
-              @Permission(
-                alias = "microphone",
-                strings = {
-                  Manifest.permission.RECORD_AUDIO
-                }
-              )
-            }
+              name = "PermissionBridge"
           )
           public class PermissionBridgePlugin extends Plugin {
 
-            private static PermissionBridgePlugin instance;
+              private static final String TAG =
+                  "PermissionBridge";
 
-            private static Intent pendingSharedIntent;
+              private static final String INBOX =
+                  "shared-media-inbox";
 
-            private static boolean initialSyncClaimed = false;
+              private static final long MAX_AUDIO_BYTES =
+                  50L * 1024L * 1024L;
 
-            private static boolean sharedLaunch = false;
+              private static final long MAX_PHOTO_BYTES =
+                  20L * 1024L * 1024L;
 
-            private static final String INBOX_DIR =
-              "shared-media-inbox";
+              private static final int REQUEST_CONTACTS =
+                  5011;
 
-            private static final long MAX_AUDIO_BYTES =
-              50L * 1024L * 1024L;
-
-            private static final long MAX_PHOTO_BYTES =
-              20L * 1024L * 1024L;
-
-
-            @Override
-            public void load() {
-
-              super.load();
-
-              instance = this;
-
-              Intent pending =
-                pendingSharedIntent;
-
-              pendingSharedIntent = null;
-
-              if (pending != null) {
-                handleSharedIntent(pending);
-              }
-            }
+              private static final int REQUEST_MICROPHONE =
+                  5012;
 
 
-            private File inboxDir() {
+              // ==================================================
+              // LIFECYCLE
+              // ==================================================
 
-              File dir =
-                new File(
-                  getContext().getFilesDir(),
-                  INBOX_DIR
-                );
-
-              if (!dir.exists()) {
-                dir.mkdirs();
+              @Override
+              public void load() {
+                  super.load();
               }
 
-              return dir;
-            }
 
+              // ==================================================
+              // PERMISSIONS
+              // ==================================================
 
-            private String getMime(Uri uri) {
+              @PluginMethod
+              public void requestContactsPermission(
+                  PluginCall call
+              ) {
+                  Activity activity = getActivity();
 
-              try {
+                  if (activity == null) {
+                      call.reject("Activity indisponível");
+                      return;
+                  }
 
-                return getContext()
-                  .getContentResolver()
-                  .getType(uri);
+                  if (
+                      ContextCompat.checkSelfPermission(
+                          activity,
+                          Manifest.permission.READ_CONTACTS
+                      ) == PackageManager.PERMISSION_GRANTED
+                  ) {
+                      JSObject result = new JSObject();
+                      result.put("granted", true);
+                      call.resolve(result);
+                      return;
+                  }
 
-              } catch (Exception ignored) {
-
-                return null;
-              }
-            }
-
-
-            private String getDisplayName(Uri uri) {
-
-              try {
-
-                android.database.Cursor cursor =
-                  getContext()
-                    .getContentResolver()
-                    .query(
-                      uri,
-                      new String[]{
-                        OpenableColumns.DISPLAY_NAME
+                  ActivityCompat.requestPermissions(
+                      activity,
+                      new String[] {
+                          Manifest.permission.READ_CONTACTS,
+                          Manifest.permission.WRITE_CONTACTS
                       },
-                      null,
-                      null,
-                      null
-                    );
+                      REQUEST_CONTACTS
+                  );
 
-                if (cursor != null) {
+                  JSObject result = new JSObject();
+                  result.put("granted", false);
+                  result.put("requested", true);
 
+                  call.resolve(result);
+              }
+
+
+              @PluginMethod
+              public void requestMicrophonePermission(
+                  PluginCall call
+              ) {
+                  Activity activity = getActivity();
+
+                  if (activity == null) {
+                      call.reject("Activity indisponível");
+                      return;
+                  }
+
+                  if (
+                      ContextCompat.checkSelfPermission(
+                          activity,
+                          Manifest.permission.RECORD_AUDIO
+                      ) == PackageManager.PERMISSION_GRANTED
+                  ) {
+                      JSObject result = new JSObject();
+                      result.put("granted", true);
+                      call.resolve(result);
+                      return;
+                  }
+
+                  ActivityCompat.requestPermissions(
+                      activity,
+                      new String[] {
+                          Manifest.permission.RECORD_AUDIO
+                      },
+                      REQUEST_MICROPHONE
+                  );
+
+                  JSObject result = new JSObject();
+                  result.put("granted", false);
+                  result.put("requested", true);
+
+                  call.resolve(result);
+              }
+
+
+              // ==================================================
+              // SETTINGS
+              // ==================================================
+
+              @PluginMethod
+              public void openSettings(
+                  PluginCall call
+              ) {
                   try {
-
-                    if (cursor.moveToFirst()) {
-                      return cursor.getString(0);
-                    }
-
-                  } finally {
-                    cursor.close();
-                  }
-                }
-
-              } catch (Exception ignored) {
-              }
-
-              return null;
-            }
-
-
-            private String encode(String value) {
-
-              if (value == null) {
-                value = "";
-              }
-
-              return Base64.encodeToString(
-                value.getBytes(
-                  StandardCharsets.UTF_8
-                ),
-                Base64.URL_SAFE |
-                Base64.NO_WRAP |
-                Base64.NO_PADDING
-              );
-            }
-
-
-            private String decode(String value) {
-
-              try {
-
-                return new String(
-                  Base64.decode(
-                    value,
-                    Base64.URL_SAFE
-                  ),
-                  StandardCharsets.UTF_8
-                );
-
-              } catch (Exception ignored) {
-
-                return "";
-              }
-            }
-
-
-            private JSObject metadata(File file) {
-
-              JSObject result =
-                new JSObject();
-
-              String[] parts =
-                file.getName()
-                  .split("__", -1);
-
-              if (parts.length < 5) {
-                return result;
-              }
-
-              result.put(
-                "id",
-                parts[0]
-              );
-
-              result.put(
-                "mimeType",
-                decode(parts[1])
-              );
-
-              result.put(
-                "name",
-                decode(parts[2])
-              );
-
-              result.put(
-                "kind",
-                parts[3]
-              );
-
-              result.put(
-                "size",
-                file.length()
-              );
-
-              result.put(
-                "receivedAt",
-                new SimpleDateFormat(
-                  "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-                  Locale.US
-                ).format(
-                  new Date(
-                    file.lastModified()
-                  )
-                )
-              );
-
-              return result;
-            }
-
-
-            private File findById(String id) {
-
-              if (
-                id == null ||
-                id.trim().isEmpty()
-              ) {
-                return null;
-              }
-
-              File[] files =
-                inboxDir().listFiles();
-
-              if (files == null) {
-                return null;
-              }
-
-              for (File file : files) {
-
-                if (
-                  file.getName()
-                    .startsWith(id + "__")
-                ) {
-                  return file;
-                }
-              }
-
-              return null;
-            }
-
-
-            // ========================================================
-            // DETECÇÃO DE ARQUIVOS
-            // ========================================================
-
-            private boolean byteAt(
-              byte[] data,
-              int length,
-              int index,
-              int expected
-            ) {
-
-              if (
-                index < 0 ||
-                index >= length
-              ) {
-                return false;
-              }
-
-              return (data[index] & 0xff) ==
-                (expected & 0xff);
-            }
-
-
-            private boolean signature(
-              byte[] data,
-              int length,
-              int... values
-            ) {
-
-              if (
-                length < values.length
-              ) {
-                return false;
-              }
-
-              for (
-                int i = 0;
-                i < values.length;
-                i++
-              ) {
-
-                if (
-                  !byteAt(
-                    data,
-                    length,
-                    i,
-                    values[i]
-                  )
-                ) {
-                  return false;
-                }
-              }
-
-              return true;
-            }
-
-
-            private String sniff(File file)
-              throws Exception {
-
-              byte[] h =
-                new byte[64];
-
-              int length = 0;
-
-
-              try (
-                InputStream input =
-                  new FileInputStream(file)
-              ) {
-
-                while (
-                  length < h.length
-                ) {
-
-                  int n =
-                    input.read(
-                      h,
-                      length,
-                      h.length - length
-                    );
-
-                  if (n < 0) {
-                    break;
-                  }
-
-                  if (n == 0) {
-                    continue;
-                  }
-
-                  length += n;
-                }
-              }
-
-
-              // JPEG
-
-              if (
-                signature(
-                  h,
-                  length,
-                  0xff,
-                  0xd8,
-                  0xff
-                )
-              ) {
-
-                return "photo|image/jpeg";
-              }
-
-
-              // PNG
-
-              if (
-                signature(
-                  h,
-                  length,
-                  0x89,
-                  0x50,
-                  0x4e,
-                  0x47,
-                  0x0d,
-                  0x0a,
-                  0x1a,
-                  0x0a
-                )
-              ) {
-
-                return "photo|image/png";
-              }
-
-
-              // WEBP
-
-              if (
-                length >= 12 &&
-                signature(
-                  h,
-                  length,
-                  0x52,
-                  0x49,
-                  0x46,
-                  0x46
-                ) &&
-                byteAt(h, length, 8, 'W') &&
-                byteAt(h, length, 9, 'E') &&
-                byteAt(h, length, 10, 'B') &&
-                byteAt(h, length, 11, 'P')
-              ) {
-
-                return "photo|image/webp";
-              }
-
-
-              // OGG / OPUS
-
-              if (
-                signature(
-                  h,
-                  length,
-                  0x4f,
-                  0x67,
-                  0x67,
-                  0x53
-                )
-              ) {
-
-                return "audio|audio/ogg";
-              }
-
-
-              // WAV
-
-              if (
-                length >= 12 &&
-                signature(
-                  h,
-                  length,
-                  0x52,
-                  0x49,
-                  0x46,
-                  0x46
-                ) &&
-                byteAt(h, length, 8, 'W') &&
-                byteAt(h, length, 9, 'A') &&
-                byteAt(h, length, 10, 'V') &&
-                byteAt(h, length, 11, 'E')
-              ) {
-
-                return "audio|audio/wav";
-              }
-
-
-              // MP3 com ID3
-
-              if (
-                signature(
-                  h,
-                  length,
-                  0x49,
-                  0x44,
-                  0x33
-                )
-              ) {
-
-                return "audio|audio/mpeg";
-              }
-
-
-              // MP3 sem ID3
-
-              if (
-                length >= 2
-              ) {
-
-                int first =
-                  h[0] & 0xff;
-
-                int second =
-                  h[1] & 0xff;
-
-                if (
-                  first == 0xff &&
-                  (second & 0xe0) == 0xe0
-                ) {
-
-                  return "audio|audio/mpeg";
-                }
-              }
-
-
-              // MP4 / M4A / HEIC
-
-              if (
-                length >= 12 &&
-                byteAt(h, length, 4, 'f') &&
-                byteAt(h, length, 5, 't') &&
-                byteAt(h, length, 6, 'y') &&
-                byteAt(h, length, 7, 'p')
-              ) {
-
-                String brand =
-                  new String(
-                    h,
-                    8,
-                    4,
-                    StandardCharsets.US_ASCII
-                  );
-
-
-                if (
-                  brand.equals("heic") ||
-                  brand.equals("heix") ||
-                  brand.equals("hevc") ||
-                  brand.equals("hevx") ||
-                  brand.equals("mif1") ||
-                  brand.equals("msf1")
-                ) {
-
-                  return "photo|image/heic";
-                }
-
-
-                if (
-                  brand.equals("M4A ") ||
-                  brand.equals("M4B ")
-                ) {
-
-                  return "audio|audio/mp4";
-                }
-              }
-
-
-              // WEBM / MATROSKA
-
-              if (
-                signature(
-                  h,
-                  length,
-                  0x1a,
-                  0x45,
-                  0xdf,
-                  0xa3
-                )
-              ) {
-
-                return "audio|audio/webm";
-              }
-
-
-              return null;
-            }
-
-
-            private String extension(
-              String mime,
-              String name
-            ) {
-
-              String lower =
-                name == null
-                  ? ""
-                  : name.toLowerCase(
-                      Locale.US
-                    );
-
-
-              if (
-                lower.matches(
-                  ".*\\.(ogg|opus|m4a|aac|mp3|wav|amr|3gp|webm|mp4)$"
-                )
-              ) {
-
-                return lower.substring(
-                  lower.lastIndexOf('.') + 1
-                );
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("ogg")
-              ) {
-                return "ogg";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("mpeg")
-              ) {
-                return "mp3";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("wav")
-              ) {
-                return "wav";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("webm")
-              ) {
-                return "webm";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("mp4")
-              ) {
-                return "m4a";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("png")
-              ) {
-                return "png";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("webp")
-              ) {
-                return "webp";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("heic")
-              ) {
-                return "heic";
-              }
-
-
-              if (
-                mime != null &&
-                mime.contains("jpeg")
-              ) {
-                return "jpg";
-              }
-
-
-              return "bin";
-            }
-
-
-            // ========================================================
-            // RECEBER MÍDIA
-            // ========================================================
-
-            private void receive(Uri uri) {
-
-              if (uri == null) {
-                return;
-              }
-
-
-              String mime =
-                getMime(uri);
-
-              String name =
-                getDisplayName(uri);
-
-
-              String lowerMime =
-                mime == null
-                  ? ""
-                  : mime.toLowerCase(
-                      Locale.US
-                    );
-
-
-              String lowerName =
-                name == null
-                  ? ""
-                  : name.toLowerCase(
-                      Locale.US
-                    );
-
-
-              boolean audioHint =
-                lowerMime.startsWith("audio/") ||
-                lowerName.matches(
-                  ".*\\.(ogg|opus|m4a|aac|mp3|wav|amr|3gp|webm|mp4)$"
-                );
-
-
-              boolean photoHint =
-                lowerMime.startsWith("image/") ||
-                lowerName.matches(
-                  ".*\\.(jpg|jpeg|png|webp|heic|gif)$"
-                );
-
-
-              long max =
-                photoHint && !audioHint
-                  ? MAX_PHOTO_BYTES
-                  : MAX_AUDIO_BYTES;
-
-
-              File temp =
-                new File(
-                  inboxDir(),
-                  "media-temp-" +
-                  System.currentTimeMillis() +
-                  "-" +
-                  Math.abs(
-                    uri.toString().hashCode()
-                  ) +
-                  ".tmp"
-                );
-
-
-              long total = 0;
-
-
-              try (
-                InputStream input =
-                  getContext()
-                    .getContentResolver()
-                    .openInputStream(uri);
-
-                FileOutputStream output =
-                  new FileOutputStream(temp)
-              ) {
-
-                if (input == null) {
-
-                  throw new Exception(
-                    "STREAM_UNAVAILABLE"
-                  );
-                }
-
-
-                byte[] buffer =
-                  new byte[8192];
-
-                int read;
-
-
-                while (
-                  (read = input.read(buffer)) != -1
-                ) {
-
-                  total += read;
-
-
-                  if (total > max) {
-
-                    throw new Exception(
-                      "MEDIA_TOO_LARGE"
-                    );
-                  }
-
-
-                  output.write(
-                    buffer,
-                    0,
-                    read
-                  );
-                }
-
-
-                output.flush();
-
-
-              } catch (Exception ex) {
-
-                try {
-                  temp.delete();
-                } catch (Exception ignored) {
-                }
-
-
-                notifyError(
-                  uri,
-                  ex.getMessage() == null
-                    ? "RECEIVE_FAILED"
-                    : ex.getMessage()
-                );
-
-                return;
-              }
-
-
-              String detected = null;
-
-
-              try {
-
-                detected =
-                  sniff(temp);
-
-              } catch (Exception ignored) {
-              }
-
-
-              boolean audio =
-                audioHint ||
-                (
-                  detected != null &&
-                  detected.startsWith("audio|")
-                );
-
-
-              boolean photo =
-                photoHint ||
-                (
-                  detected != null &&
-                  detected.startsWith("photo|")
-                );
-
-
-              if (
-                photo &&
-                total > MAX_PHOTO_BYTES
-              ) {
-
-                temp.delete();
-
-                notifyError(
-                  uri,
-                  "MEDIA_TOO_LARGE"
-                );
-
-                return;
-              }
-
-
-              if (!audio && !photo) {
-
-                temp.delete();
-
-                notifyError(
-                  uri,
-                  "UNRECOGNIZED_MEDIA"
-                );
-
-                return;
-              }
-
-
-              if (detected != null) {
-
-                String[] parts =
-                  detected.split(
-                    "\\|",
-                    2
-                  );
-
-
-                if (parts.length == 2) {
-
-                  if (
-                    mime == null ||
-                    mime.trim().isEmpty() ||
-                    mime.equals("*/*") ||
-                    mime.equalsIgnoreCase(
-                      "application/octet-stream"
-                    )
-                  ) {
-
-                    mime =
-                      parts[1];
-                  }
-
-
-                  if (
-                    name == null ||
-                    name.trim().isEmpty() ||
-                    !name.contains(".")
-                  ) {
-
-                    name =
-                      (
-                        audio
-                          ? "audio-whatsapp."
-                          : "foto-whatsapp."
-                      ) +
-                      extension(
-                        parts[1],
-                        name
+                      Intent intent =
+                          new Intent(
+                              Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                          );
+
+                      intent.setData(
+                          Uri.parse(
+                              "package:" +
+                              getContext().getPackageName()
+                          )
+                      );
+
+                      getContext().startActivity(intent);
+
+                      call.resolve();
+
+                  } catch (Exception e) {
+                      call.reject(
+                          "Não foi possível abrir configurações",
+                          e
                       );
                   }
-                }
               }
 
 
-              if (
-                mime == null ||
-                mime.trim().isEmpty() ||
-                mime.equals("*/*") ||
-                mime.equalsIgnoreCase(
-                  "application/octet-stream"
-                )
-              ) {
+              // ==================================================
+              // SHARED MEDIA
+              // ==================================================
 
-                mime =
-                  audio
-                    ? "audio/*"
-                    : "image/*";
-              }
+              private File getInboxDirectory() {
 
+                  File dir =
+                      new File(
+                          getContext().getFilesDir(),
+                          INBOX
+                      );
 
-              if (
-                name == null ||
-                name.trim().isEmpty()
-              ) {
-
-                name =
-                  (
-                    audio
-                      ? "audio-whatsapp."
-                      : "foto-whatsapp."
-                  ) +
-                  extension(
-                    mime,
-                    name
-                  );
-              }
-
-
-              String id =
-                "media-" +
-                System.currentTimeMillis() +
-                "-" +
-                Math.abs(
-                  (
-                    uri.toString() +
-                    total
-                  ).hashCode()
-                );
-
-
-              File output =
-                new File(
-                  inboxDir(),
-                  id +
-                  "__" +
-                  encode(mime) +
-                  "__" +
-                  encode(name) +
-                  "__" +
-                  (
-                    audio
-                      ? "audio"
-                      : "photo"
-                  ) +
-                  "__1.bin"
-                );
-
-
-              if (
-                !temp.renameTo(output)
-              ) {
-
-                try (
-                  FileInputStream input =
-                    new FileInputStream(temp);
-
-                  FileOutputStream out =
-                    new FileOutputStream(output)
-                ) {
-
-                  byte[] buffer =
-                    new byte[8192];
-
-                  int read;
-
-
-                  while (
-                    (read = input.read(buffer)) != -1
-                  ) {
-
-                    out.write(
-                      buffer,
-                      0,
-                      read
-                    );
+                  if (!dir.exists()) {
+                      //noinspection ResultOfMethodCallIgnored
+                      dir.mkdirs();
                   }
-                }
 
-
-                temp.delete();
+                  return dir;
               }
 
 
-              JSObject event =
-                metadata(output);
-
-
-              event.put(
-                "ok",
-                true
-              );
-
-
-              if (instance != null) {
-
-                instance.notifyListeners(
-                  "sharedMedia",
-                  event
-                );
-              }
-            }
-
-
-            private void notifyError(
-              Uri uri,
-              String code
-            ) {
-
-              if (instance == null) {
-                return;
-              }
-
-
-              JSObject event =
-                new JSObject();
-
-
-              event.put(
-                "ok",
-                false
-              );
-
-
-              event.put(
-                "code",
-                code
-              );
-
-
-              event.put(
-                "uri",
-                uri == null
-                  ? ""
-                  : uri.toString()
-              );
-
-
-              instance.notifyListeners(
-                "sharedMediaError",
-                event
-              );
-            }
-
-
-            // ========================================================
-            // WHATSAPP / ANDROID SHARE
-            // ========================================================
-
-            public static void handleSharedIntent(
-              Intent intent
-            ) {
-
-              if (intent == null) {
-                return;
-              }
-
-
-              String action =
-                intent.getAction();
-
-
-              if (
-                !Intent.ACTION_SEND.equals(action) &&
-                !Intent.ACTION_SEND_MULTIPLE.equals(action)
+              private String sanitizeFileName(
+                  String name
               ) {
+                  if (
+                      name == null ||
+                      name.trim().isEmpty()
+                  ) {
+                      name = "shared-media";
+                  }
 
-                return;
+                  name =
+                      name.replaceAll(
+                          "[^a-zA-Z0-9._-]",
+                          "_"
+                      );
+
+                  return name;
               }
 
 
-              if (instance == null) {
+              private boolean byteAt(
+                  byte[] data,
+                  int length,
+                  int index,
+                  int expected
+              ) {
+                  if (
+                      index < 0 ||
+                      index >= length
+                  ) {
+                      return false;
+                  }
 
-                pendingSharedIntent =
-                  new Intent(intent);
-
-                return;
+                  return
+                      (data[index] & 0xff) ==
+                      (expected & 0xff);
               }
 
 
-              sharedLaunch = true;
-
-
-              try {
-
-                ArrayList<Uri> received =
-                  new ArrayList<>();
-
-
-                // ----------------------------------------------------
-                // CLIPDATA
-                // ----------------------------------------------------
-
-                ClipData clip =
-                  intent.getClipData();
-
-
-                if (clip != null) {
+              private boolean signature(
+                  byte[] data,
+                  int length,
+                  int... values
+              ) {
+                  if (
+                      length < values.length
+                  ) {
+                      return false;
+                  }
 
                   for (
-                    int i = 0;
-                    i < clip.getItemCount();
-                    i++
+                      int i = 0;
+                      i < values.length;
+                      i++
+                  ) {
+                      if (
+                          !byteAt(
+                              data,
+                              length,
+                              i,
+                              values[i]
+                          )
+                      ) {
+                          return false;
+                      }
+                  }
+
+                  return true;
+              }
+
+
+              private String detectMime(
+                  File file
+              ) {
+                  try (
+                      FileInputStream input =
+                          new FileInputStream(file)
                   ) {
 
-                    Uri uri =
-                      clip.getItemAt(i).getUri();
+                      byte[] h =
+                          new byte[32];
+
+                      int length =
+                          input.read(h);
+
+                      if (length <= 0) {
+                          return null;
+                      }
 
 
-                    if (
-                      uri != null &&
-                      !received.contains(uri)
-                    ) {
-
-                      received.add(uri);
-                    }
-                  }
-                }
-
-
-                // ----------------------------------------------------
-                // SEND_MULTIPLE
-                // ----------------------------------------------------
-
-                if (
-                  Intent.ACTION_SEND_MULTIPLE.equals(
-                    action
-                  )
-                ) {
-
-                  ArrayList<Uri> uris =
-                    intent.getParcelableArrayListExtra(
-                      Intent.EXTRA_STREAM
-                    );
-
-
-                  if (uris != null) {
-
-                    for (Uri uri : uris) {
+                      // JPEG
 
                       if (
-                        uri != null &&
-                        !received.contains(uri)
+                          signature(
+                              h,
+                              length,
+                              0xff,
+                              0xd8,
+                              0xff
+                          )
+                      ) {
+                          return "image/jpeg";
+                      }
+
+
+                      // PNG
+
+                      if (
+                          signature(
+                              h,
+                              length,
+                              0x89,
+                              0x50,
+                              0x4e,
+                              0x47,
+                              0x0d,
+                              0x0a,
+                              0x1a,
+                              0x0a
+                          )
+                      ) {
+                          return "image/png";
+                      }
+
+
+                      // WEBP
+
+                      if (
+                          length >= 12 &&
+                          byteAt(h, length, 0, 'R') &&
+                          byteAt(h, length, 1, 'I') &&
+                          byteAt(h, length, 2, 'F') &&
+                          byteAt(h, length, 3, 'F') &&
+                          byteAt(h, length, 8, 'W') &&
+                          byteAt(h, length, 9, 'E') &&
+                          byteAt(h, length, 10, 'B') &&
+                          byteAt(h, length, 11, 'P')
+                      ) {
+                          return "image/webp";
+                      }
+
+
+                      // OGG / OPUS
+
+                      if (
+                          signature(
+                              h,
+                              length,
+                              'O',
+                              'g',
+                              'g',
+                              'S'
+                          )
+                      ) {
+                          return "audio/ogg";
+                      }
+
+
+                      // WAV
+
+                      if (
+                          length >= 12 &&
+                          byteAt(h, length, 0, 'R') &&
+                          byteAt(h, length, 1, 'I') &&
+                          byteAt(h, length, 2, 'F') &&
+                          byteAt(h, length, 3, 'F') &&
+                          byteAt(h, length, 8, 'W') &&
+                          byteAt(h, length, 9, 'A') &&
+                          byteAt(h, length, 10, 'V') &&
+                          byteAt(h, length, 11, 'E')
+                      ) {
+                          return "audio/wav";
+                      }
+
+
+                      // WEBM
+
+                      if (
+                          signature(
+                              h,
+                              length,
+                              0x1a,
+                              0x45,
+                              0xdf,
+                              0xa3
+                          )
+                      ) {
+                          return "audio/webm";
+                      }
+
+
+                      // MP3 ID3
+
+                      if (
+                          signature(
+                              h,
+                              length,
+                              'I',
+                              'D',
+                              '3'
+                          )
+                      ) {
+                          return "audio/mpeg";
+                      }
+
+
+                      // MP3 sync
+
+                      if (length >= 2) {
+
+                          int first =
+                              h[0] & 0xff;
+
+                          int second =
+                              h[1] & 0xff;
+
+                          if (
+                              first == 0xff &&
+                              (second & 0xe0) == 0xe0
+                          ) {
+                              return "audio/mpeg";
+                          }
+                      }
+
+
+                      // MP4 / M4A / M4B / HEIC
+
+                      if (length >= 12) {
+
+                          String brand =
+                              new String(
+                                  h,
+                                  8,
+                                  4,
+                                  java.nio.charset.StandardCharsets.US_ASCII
+                              );
+
+                          if (
+                              brand.equals("ftyp")
+                          ) {
+                              String full =
+                                  new String(
+                                      h,
+                                      0,
+                                      length,
+                                      java.nio.charset.StandardCharsets.US_ASCII
+                                  ).toLowerCase(
+                                      Locale.US
+                                  );
+
+                              if (
+                                  full.contains("m4a") ||
+                                  full.contains("m4b")
+                              ) {
+                                  return "audio/mp4";
+                              }
+
+                              if (
+                                  full.contains("heic") ||
+                                  full.contains("heix") ||
+                                  full.contains("hevc") ||
+                                  full.contains("hevx")
+                              ) {
+                                  return "image/heic";
+                              }
+
+                              return "video/mp4";
+                          }
+                      }
+
+                  } catch (Exception e) {
+                      Log.e(
+                          TAG,
+                          "Erro detectando MIME",
+                          e
+                      );
+                  }
+
+                  return null;
+              }
+
+
+              // ==================================================
+              // CORREÇÃO IMPORTANTE:
+              // CÓPIA COM TRATAMENTO DE IOException
+              // ==================================================
+
+              private boolean copyFile(
+                  File temp,
+                  File output
+              ) {
+
+                  try {
+
+                      File parent =
+                          output.getParentFile();
+
+                      if (
+                          parent != null &&
+                          !parent.exists()
+                      ) {
+                          if (
+                              !parent.mkdirs() &&
+                              !parent.exists()
+                          ) {
+                              return false;
+                          }
+                      }
+
+
+                      try (
+                          FileInputStream input =
+                              new FileInputStream(temp);
+
+                          FileOutputStream out =
+                              new FileOutputStream(output)
                       ) {
 
-                        received.add(uri);
+                          byte[] buffer =
+                              new byte[8192];
+
+                          int read;
+
+                          while (
+                              (read =
+                                  input.read(buffer)
+                              ) != -1
+                          ) {
+
+                              out.write(
+                                  buffer,
+                                  0,
+                                  read
+                              );
+                          }
+
+                          out.flush();
                       }
-                    }
+
+                      return true;
+
+                  } catch (IOException e) {
+
+                      Log.e(
+                          TAG,
+                          "Erro ao copiar arquivo compartilhado",
+                          e
+                      );
+
+                      if (output.exists()) {
+                          //noinspection ResultOfMethodCallIgnored
+                          output.delete();
+                      }
+
+                      return false;
+                  }
+              }
+
+
+              // ==================================================
+              // RECEBER URI
+              // ==================================================
+
+              private JSObject saveUri(
+                  Uri uri,
+                  String originalName,
+                  String suppliedMime
+              ) {
+
+                  if (uri == null) {
+                      return null;
+                  }
+
+                  ContentResolver resolver =
+                      getContext().getContentResolver();
+
+                  long size = -1;
+
+                  try {
+                      android.database.Cursor cursor =
+                          resolver.query(
+                              uri,
+                              null,
+                              null,
+                              null,
+                              null
+                          );
+
+                      if (cursor != null) {
+
+                          int sizeIndex =
+                              cursor.getColumnIndex(
+                                  android.provider.OpenableColumns.SIZE
+                              );
+
+                          if (
+                              cursor.moveToFirst() &&
+                              sizeIndex >= 0 &&
+                              !cursor.isNull(sizeIndex)
+                          ) {
+                              size =
+                                  cursor.getLong(
+                                      sizeIndex
+                                  );
+                          }
+
+                          cursor.close();
+                      }
+
+                  } catch (Exception e) {
+                      Log.w(
+                          TAG,
+                          "Não foi possível obter tamanho",
+                          e
+                      );
                   }
 
 
-                } else {
+                  String name =
+                      sanitizeFileName(
+                          originalName
+                      );
 
-                  // --------------------------------------------------
-                  // SEND
-                  // --------------------------------------------------
 
-                  Uri uri = null;
+                  if (
+                      name.equals("shared-media")
+                  ) {
+
+                      String extension =
+                          extensionFromMime(
+                              suppliedMime
+                          );
+
+                      if (
+                          extension != null
+                      ) {
+                          name += extension;
+                      }
+                  }
+
+
+                  File inbox =
+                      getInboxDirectory();
+
+                  File temp =
+                      new File(
+                          inbox,
+                          ".tmp_" +
+                          System.currentTimeMillis()
+                      );
+
+                  File output =
+                      new File(
+                          inbox,
+                          System.currentTimeMillis() +
+                          "_" +
+                          name
+                      );
 
 
                   try {
 
-                    uri =
-                      intent.getParcelableExtra(
-                        Intent.EXTRA_STREAM
+                      String detected =
+                          suppliedMime;
+
+                      if (
+                          detected == null ||
+                          detected.trim().isEmpty() ||
+                          detected.equals("*/*")
+                      ) {
+                          detected =
+                              resolver.getType(uri);
+                      }
+
+
+                      try (
+                          InputStream input =
+                              resolver.openInputStream(uri)
+                      ) {
+
+                          if (input == null) {
+                              return null;
+                          }
+
+                          try (
+                              FileOutputStream out =
+                                  new FileOutputStream(temp)
+                          ) {
+
+                              byte[] buffer =
+                                  new byte[8192];
+
+                              long total = 0;
+
+                              int read;
+
+                              while (
+                                  (read =
+                                      input.read(buffer)
+                                  ) != -1
+                              ) {
+
+                                  total += read;
+
+                                  long limit =
+                                      MAX_AUDIO_BYTES;
+
+                                  String lower =
+                                      name.toLowerCase(
+                                          Locale.US
+                                      );
+
+                                  if (
+                                      detected != null &&
+                                      detected.startsWith(
+                                          "image/"
+                                      )
+                                  ) {
+                                      limit =
+                                          MAX_PHOTO_BYTES;
+                                  }
+
+                                  if (
+                                      lower.endsWith(".jpg") ||
+                                      lower.endsWith(".jpeg") ||
+                                      lower.endsWith(".png") ||
+                                      lower.endsWith(".webp") ||
+                                      lower.endsWith(".heic") ||
+                                      lower.endsWith(".heif")
+                                  ) {
+                                      limit =
+                                          MAX_PHOTO_BYTES;
+                                  }
+
+                                  if (
+                                      total > limit
+                                  ) {
+                                      Log.e(
+                                          TAG,
+                                          "Arquivo excede limite"
+                                      );
+
+                                      return null;
+                                  }
+
+                                  out.write(
+                                      buffer,
+                                      0,
+                                      read
+                                  );
+                              }
+
+                              out.flush();
+                          }
+                      }
+
+
+                      String detectedMime =
+                          detectMime(temp);
+
+                      if (
+                          detectedMime != null
+                      ) {
+                          detected =
+                              detectedMime;
+                      }
+
+
+                      if (
+                          detected == null ||
+                          detected.trim().isEmpty()
+                      ) {
+                          detected =
+                              "application/octet-stream";
+                      }
+
+
+                      // Garantir extensão quando necessário
+
+                      if (
+                          !hasKnownExtension(name)
+                      ) {
+
+                          String extension =
+                              extensionFromMime(
+                                  detected
+                              );
+
+                          if (
+                              extension != null
+                          ) {
+
+                              File renamed =
+                                  new File(
+                                      inbox,
+                                      output.getName() +
+                                      extension
+                                  );
+
+                              if (
+                                  temp.renameTo(renamed)
+                              ) {
+                                  temp = renamed;
+                              }
+                          }
+                      }
+
+
+                      if (
+                          !copyFile(
+                              temp,
+                              output
+                          )
+                      ) {
+                          return null;
+                      }
+
+
+                      if (
+                          temp.exists()
+                      ) {
+                          //noinspection ResultOfMethodCallIgnored
+                          temp.delete();
+                      }
+
+
+                      JSObject result =
+                          new JSObject();
+
+                      result.put(
+                          "id",
+                          output.getName()
                       );
 
-                  } catch (Exception ignored) {
+                      result.put(
+                          "name",
+                          output.getName()
+                      );
+
+                      result.put(
+                          "path",
+                          output.getAbsolutePath()
+                      );
+
+                      result.put(
+                          "mimeType",
+                          detected
+                      );
+
+                      result.put(
+                          "size",
+                          output.length()
+                      );
+
+                      result.put(
+                          "createdAt",
+                          System.currentTimeMillis()
+                      );
+
+                      return result;
+
+                  } catch (Exception e) {
+
+                      Log.e(
+                          TAG,
+                          "Erro salvando mídia compartilhada",
+                          e
+                      );
+
+                      if (temp.exists()) {
+                          //noinspection ResultOfMethodCallIgnored
+                          temp.delete();
+                      }
+
+                      if (output.exists()) {
+                          //noinspection ResultOfMethodCallIgnored
+                          output.delete();
+                      }
+
+                      return null;
+                  }
+              }
+
+
+              private boolean hasKnownExtension(
+                  String name
+              ) {
+
+                  String lower =
+                      name.toLowerCase(
+                          Locale.US
+                      );
+
+                  String[] extensions = {
+                      ".jpg",
+                      ".jpeg",
+                      ".png",
+                      ".webp",
+                      ".heic",
+                      ".heif",
+                      ".ogg",
+                      ".opus",
+                      ".wav",
+                      ".mp3",
+                      ".m4a",
+                      ".m4b",
+                      ".mp4",
+                      ".webm"
+                  };
+
+                  for (
+                      String ext :
+                      extensions
+                  ) {
+                      if (
+                          lower.endsWith(ext)
+                      ) {
+                          return true;
+                      }
+                  }
+
+                  return false;
+              }
+
+
+              private String extensionFromMime(
+                  String mime
+              ) {
+
+                  if (mime == null) {
+                      return null;
+                  }
+
+                  String lower =
+                      mime.toLowerCase(
+                          Locale.US
+                      );
+
+                  if (
+                      lower.equals("image/jpeg")
+                  ) {
+                      return ".jpg";
+                  }
+
+                  if (
+                      lower.equals("image/png")
+                  ) {
+                      return ".png";
+                  }
+
+                  if (
+                      lower.equals("image/webp")
+                  ) {
+                      return ".webp";
+                  }
+
+                  if (
+                      lower.equals("image/heic")
+                  ) {
+                      return ".heic";
+                  }
+
+                  if (
+                      lower.equals("audio/ogg")
+                  ) {
+                      return ".ogg";
+                  }
+
+                  if (
+                      lower.equals("audio/wav") ||
+                      lower.equals("audio/x-wav")
+                  ) {
+                      return ".wav";
+                  }
+
+                  if (
+                      lower.equals("audio/mpeg")
+                  ) {
+                      return ".mp3";
+                  }
+
+                  if (
+                      lower.equals("audio/mp4")
+                  ) {
+                      return ".m4a";
+                  }
+
+                  if (
+                      lower.equals("audio/webm")
+                  ) {
+                      return ".webm";
+                  }
+
+                  return null;
+              }
+
+
+              // ==================================================
+              // PROCESSAR INTENT
+              // ==================================================
+
+              public static void handleSharedIntent(
+                  Intent intent
+              ) {
+
+                  if (intent == null) {
+                      return;
+                  }
+
+                  String action =
+                      intent.getAction();
+
+                  if (
+                      Intent.ACTION_SEND.equals(action) ||
+                      Intent.ACTION_SEND_MULTIPLE.equals(action)
+                  ) {
+
+                      // A atividade tratará a intenção quando
+                      // o plugin estiver carregado.
+                  }
+              }
+
+
+              private void processIntent(
+                  Intent intent
+              ) {
+
+                  if (intent == null) {
+                      return;
+                  }
+
+                  String action =
+                      intent.getAction();
+
+                  if (
+                      !Intent.ACTION_SEND.equals(action) &&
+                      !Intent.ACTION_SEND_MULTIPLE.equals(action)
+                  ) {
+                      return;
+                  }
+
+
+                  ArrayList<Uri> uris =
+                      new ArrayList<>();
+
+
+                  Uri single =
+                      intent.getParcelableExtra(
+                          Intent.EXTRA_STREAM
+                      );
+
+                  if (single != null) {
+                      uris.add(single);
+                  }
+
+
+                  ClipData clipData =
+                      intent.getClipData();
+
+                  if (clipData != null) {
+
+                      for (
+                          int i = 0;
+                          i < clipData.getItemCount();
+                          i++
+                      ) {
+
+                          Uri uri =
+                              clipData
+                                  .getItemAt(i)
+                                  .getUri();
+
+                          if (
+                              uri != null &&
+                              !uris.contains(uri)
+                          ) {
+                              uris.add(uri);
+                          }
+                      }
                   }
 
 
                   if (
-                    uri != null &&
-                    !received.contains(uri)
+                      uris.isEmpty()
+                  ) {
+                      return;
+                  }
+
+
+                  ArrayList<JSObject> saved =
+                      new ArrayList<>();
+
+
+                  String suppliedMime =
+                      intent.getType();
+
+
+                  for (
+                      Uri uri :
+                      uris
                   ) {
 
-                    received.add(uri);
+                      String name =
+                          queryDisplayName(uri);
+
+                      JSObject item =
+                          saveUri(
+                              uri,
+                              name,
+                              suppliedMime
+                          );
+
+                      if (item != null) {
+                          saved.add(item);
+                      }
                   }
-                }
 
-
-                // ----------------------------------------------------
-                // PROCESSAR TODAS AS MÍDIAS
-                // ----------------------------------------------------
-
-                for (Uri uri : received) {
-
-                  instance.receive(uri);
-                }
-
-
-              } catch (Exception ex) {
-
-                instance.notifyError(
-                  null,
-                  "SHARED_INTENT_ERROR"
-                );
-              }
-            }
-
-
-            // ========================================================
-            // CAIXA DE MÍDIAS
-            // ========================================================
-
-            @PluginMethod
-            public void claimInitialSync(
-              PluginCall call
-            ) {
-
-              JSObject result =
-                new JSObject();
-
-
-              result.put(
-                "claimed",
-                !initialSyncClaimed
-              );
-
-
-              result.put(
-                "sharedLaunch",
-                sharedLaunch
-              );
-
-
-              initialSyncClaimed = true;
-
-
-              call.resolve(result);
-            }
-
-
-            @PluginMethod
-            public void getSharedMedia(
-              PluginCall call
-            ) {
-
-              JSArray array =
-                new JSArray();
-
-
-              File[] files =
-                inboxDir().listFiles();
-
-
-              if (files != null) {
-
-                for (File file : files) {
 
                   if (
-                    file.isFile() &&
-                    !file.getName()
-                      .endsWith(".tmp")
+                      saved.isEmpty()
                   ) {
-
-                    array.put(
-                      metadata(file)
-                    );
+                      return;
                   }
-                }
-              }
 
 
-              JSObject result =
-                new JSObject();
+                  JSArray array =
+                      new JSArray();
 
-
-              result.put(
-                "items",
-                array
-              );
-
-
-              call.resolve(result);
-            }
-
-
-            @PluginMethod
-            public void listSharedMedia(
-              PluginCall call
-            ) {
-
-              getSharedMedia(call);
-            }
-
-
-            @PluginMethod
-            public void readSharedMedia(
-              PluginCall call
-            ) {
-
-              String id =
-                call.getString(
-                  "id",
-                  ""
-                );
-
-
-              File file =
-                findById(id);
-
-
-              if (
-                file == null ||
-                !file.exists()
-              ) {
-
-                call.reject(
-                  "SHARED_MEDIA_NOT_FOUND"
-                );
-
-                return;
-              }
-
-
-              try {
-
-                java.io.ByteArrayOutputStream output =
-                  new java.io.ByteArrayOutputStream();
-
-
-                try (
-                  FileInputStream input =
-                    new FileInputStream(file)
-                ) {
-
-                  byte[] buffer =
-                    new byte[8192];
-
-                  int read;
-
-
-                  while (
-                    (read = input.read(buffer)) != -1
+                  for (
+                      JSObject item :
+                      saved
                   ) {
-
-                    output.write(
-                      buffer,
-                      0,
-                      read
-                    );
+                      array.put(item);
                   }
-                }
 
 
-                String[] parts =
-                  file.getName()
-                    .split("__", -1);
+                  JSObject event =
+                      new JSObject();
 
+                  event.put(
+                      "items",
+                      array
+                  );
 
-                String mime =
-                  parts.length >= 2
-                    ? decode(parts[1])
-                    : "application/octet-stream";
-
-
-                JSObject result =
-                  metadata(file);
-
-
-                result.put(
-                  "data",
-                  "data:" +
-                  mime +
-                  ";base64," +
-                  Base64.encodeToString(
-                    output.toByteArray(),
-                    Base64.NO_WRAP
-                  )
-                );
-
-
-                call.resolve(result);
-
-
-              } catch (Exception ex) {
-
-                call.reject(
-                  "SHARED_MEDIA_READ_ERROR",
-                  ex.getMessage()
-                );
-              }
-            }
-
-
-            @PluginMethod
-            public void deleteSharedMedia(
-              PluginCall call
-            ) {
-
-              String id =
-                call.getString(
-                  "id",
-                  ""
-                );
-
-
-              File file =
-                findById(id);
-
-
-              JSObject result =
-                new JSObject();
-
-
-              result.put(
-                "ok",
-                file == null ||
-                file.delete()
-              );
-
-
-              call.resolve(result);
-            }
-
-
-            // ========================================================
-            // PERMISSÕES
-            // ========================================================
-
-            @PluginMethod
-            public void requestContacts(
-              PluginCall call
-            ) {
-
-              if (
-                getPermissionState("contacts") ==
-                PermissionState.GRANTED
-              ) {
-
-                JSObject result =
-                  new JSObject();
-
-
-                result.put(
-                  "granted",
-                  true
-                );
-
-
-                result.put(
-                  "state",
-                  "granted"
-                );
-
-
-                call.resolve(result);
-
-                return;
-              }
-
-
-              requestPermissionForAlias(
-                "contacts",
-                call,
-                "contactsPermissionResult"
-              );
-            }
-
-
-            @PermissionCallback
-            private void contactsPermissionResult(
-              PluginCall call
-            ) {
-
-              boolean granted =
-                getPermissionState("contacts") ==
-                PermissionState.GRANTED;
-
-
-              JSObject result =
-                new JSObject();
-
-
-              result.put(
-                "granted",
-                granted
-              );
-
-
-              result.put(
-                "state",
-                granted
-                  ? "granted"
-                  : "denied"
-              );
-
-
-              call.resolve(result);
-            }
-
-
-            @PluginMethod
-            public void requestMicrophone(
-              PluginCall call
-            ) {
-
-              if (
-                getPermissionState("microphone") ==
-                PermissionState.GRANTED
-              ) {
-
-                JSObject result =
-                  new JSObject();
-
-
-                result.put(
-                  "granted",
-                  true
-                );
-
-
-                result.put(
-                  "state",
-                  "granted"
-                );
-
-
-                call.resolve(result);
-
-                return;
-              }
-
-
-              requestPermissionForAlias(
-                "microphone",
-                call,
-                "microphonePermissionResult"
-              );
-            }
-
-
-            @PermissionCallback
-            private void microphonePermissionResult(
-              PluginCall call
-            ) {
-
-              boolean granted =
-                getPermissionState("microphone") ==
-                PermissionState.GRANTED;
-
-
-              JSObject result =
-                new JSObject();
-
-
-              result.put(
-                "granted",
-                granted
-              );
-
-
-              result.put(
-                "state",
-                granted
-                  ? "granted"
-                  : "denied"
-              );
-
-
-              call.resolve(result);
-            }
-
-
-            @PluginMethod
-            public void getPermissionStates(
-              PluginCall call
-            ) {
-
-              JSObject result =
-                new JSObject();
-
-
-              result.put(
-                "contacts",
-                getPermissionState(
-                  "contacts"
-                ).toString()
-              );
-
-
-              result.put(
-                "microphone",
-                getPermissionState(
-                  "microphone"
-                ).toString()
-              );
-
-
-              call.resolve(result);
-            }
-
-
-            @PluginMethod
-            public void openSettings(
-              PluginCall call
-            ) {
-
-              try {
-
-                Intent intent =
-                  new Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                  event.put(
+                      "count",
+                      saved.size()
                   );
 
 
-                intent.setData(
-                  Uri.parse(
-                    "package:" +
-                    getContext().getPackageName()
-                  )
-                );
-
-
-                getActivity().startActivity(
-                  intent
-                );
-
-
-                call.resolve();
-
-
-              } catch (Exception ex) {
-
-                call.reject(
-                  "SETTINGS_ERROR",
-                  ex.getMessage()
-                );
+                  notifyListeners(
+                      "sharedMedia",
+                      event,
+                      true
+                  );
               }
-            }
-          }
+
+
+              private String queryDisplayName(
+                  Uri uri
+              ) {
+
+                  try {
+
+                      android.database.Cursor cursor =
+                          getContext()
+                              .getContentResolver()
+                              .query(
+                                  uri,
+                                  null,
+                                  null,
+                                  null,
+                                  null
+                              );
+
+                      if (cursor != null) {
+
+                          int nameIndex =
+                              cursor.getColumnIndex(
+                                  android.provider.OpenableColumns.DISPLAY_NAME
+                              );
+
+                          if (
+                              cursor.moveToFirst() &&
+                              nameIndex >= 0 &&
+                              !cursor.isNull(nameIndex)
+                          ) {
+
+                              String name =
+                                  cursor.getString(
+                                      nameIndex
+                                  );
+
+                              cursor.close();
+
+                              return name;
+                          }
+
+                          cursor.close();
+                      }
+
+                  } catch (Exception e) {
+                      Log.w(
+                          TAG,
+                          "Erro obtendo nome do arquivo",
+                          e
+                      );
+                  }
+
+                  return "shared-media";
+              }
+
+
+              // ==================================================
+              // INITIAL SYNC
+              // ==================================================
+
+              @PluginMethod
+              public void claimInitialSync(
+                  PluginCall call
+              ) {
+
+                  JSArray items =
+                      listFiles();
+
+                  JSObject result =
+                      new JSObject();
+
+                  result.put(
+                      "items",
+                      items
+                  );
+
+                  call.resolve(result);
+              }
+
+
+              @PluginMethod
+              public void getSharedMedia(
+                  PluginCall call
+              ) {
+
+                  JSArray items =
+                      listFiles();
+
+                  JSObject result =
+                      new JSObject();
+
+                  result.put(
+                      "items",
+                      items
+                  );
+
+                  call.resolve(result);
+              }
+
+
+              @PluginMethod
+              public void listSharedMedia(
+                  PluginCall call
+              ) {
+
+                  JSArray items =
+                      listFiles();
+
+                  JSObject result =
+                      new JSObject();
+
+                  result.put(
+                      "items",
+                      items
+                  );
+
+                  call.resolve(result);
+              }
+
+
+              private JSArray listFiles() {
+
+                  JSArray array =
+                      new JSArray();
+
+                  File dir =
+                      getInboxDirectory();
+
+                  File[] files =
+                      dir.listFiles();
+
+                  if (
+                      files == null
+                  ) {
+                      return array;
+                  }
+
+
+                  for (
+                      File file :
+                      files
+                  ) {
+
+                      if (
+                          !file.isFile()
+                      ) {
+                          continue;
+                      }
+
+                      if (
+                          file.getName()
+                              .startsWith(".tmp_")
+                      ) {
+                          continue;
+                      }
+
+
+                      String mime =
+                          detectMime(file);
+
+                      if (
+                          mime == null
+                      ) {
+                          mime =
+                              "application/octet-stream";
+                      }
+
+
+                      JSObject item =
+                          new JSObject();
+
+                      item.put(
+                          "id",
+                          file.getName()
+                      );
+
+                      item.put(
+                          "name",
+                          file.getName()
+                      );
+
+                      item.put(
+                          "path",
+                          file.getAbsolutePath()
+                      );
+
+                      item.put(
+                          "mimeType",
+                          mime
+                      );
+
+                      item.put(
+                          "size",
+                          file.length()
+                      );
+
+                      item.put(
+                          "createdAt",
+                          file.lastModified()
+                      );
+
+                      array.put(item);
+                  }
+
+                  return array;
+              }
+
+
+              @PluginMethod
+              public void readSharedMedia(
+                  PluginCall call
+              ) {
+
+                  String id =
+                      call.getString("id");
+
+                  if (
+                      id == null ||
+                      id.trim().isEmpty()
+                  ) {
+                      call.reject(
+                          "ID da mídia não informado"
+                      );
+                      return;
+                  }
+
+
+                  File file =
+                      new File(
+                          getInboxDirectory(),
+                          sanitizeFileName(id)
+                      );
+
+
+                  if (
+                      !file.exists() ||
+                      !file.isFile()
+                  ) {
+                      call.reject(
+                          "Mídia não encontrada"
+                      );
+                      return;
+                  }
+
+
+                  JSObject result =
+                      new JSObject();
+
+                  result.put(
+                      "id",
+                      file.getName()
+                  );
+
+                  result.put(
+                      "name",
+                      file.getName()
+                  );
+
+                  result.put(
+                      "path",
+                      file.getAbsolutePath()
+                  );
+
+                  result.put(
+                      "mimeType",
+                      detectMime(file)
+                  );
+
+                  result.put(
+                      "size",
+                      file.length()
+                  );
+
+
+                  call.resolve(result);
+              }
+
+
+              @PluginMethod
+              public void deleteSharedMedia(
+                  PluginCall call
+              ) {
+
+                  String id =
+                      call.getString("id");
+
+                  if (
+                      id == null ||
+                      id.trim().isEmpty()
+                  ) {
+                      call.reject(
+                          "ID da mídia não informado"
+                      );
+                      return;
+                  }
+
+
+                  File file =
+                      new File(
+                          getInboxDirectory(),
+                          sanitizeFileName(id)
+                      );
+
+
+                  if (
+                      !file.exists()
+                  ) {
+                      call.resolve();
+                      return;
+                  }
+
+
+                  if (
+                      !file.delete()
+                  ) {
+                      call.reject(
+                          "Não foi possível excluir a mídia"
+                      );
+                      return;
+                  }
+
+
+                  call.resolve();
+              }
+
+
+              // ==================================================
+              // LOAD / INTENT
+              // ==================================================
+
+              @Override
+              protected void handleOnStart() {
+                  super.handleOnStart();
+
+                  Activity activity =
+                      getActivity();
+
+                  if (activity != null) {
+                      processIntent(
+                          activity.getIntent()
+                      );
+                  }
+              }
+
+
+              @Override
+              protected void handleOnNewIntent(
+                  Intent intent
+              ) {
+                  super.handleOnNewIntent(intent);
+
+                  processIntent(intent);
+              }
           JAVA
 
-          echo "=================================================="
-          echo "PermissionBridge V120 criado."
-          echo "=================================================="
+          echo "PermissionBridgePlugin criado."
 
 
       # ============================================================
-      # 15. MAIN ACTIVITY
+      # MAIN ACTIVITY
       # ============================================================
 
       - name: Configurar MainActivity
-        shell: bash
         run: |
           set -e
 
-          MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
+          MAIN_DIR="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao"
 
-          cat > "$MAIN" <<'JAVA'
+          mkdir -p "$MAIN_DIR"
+
+          cat > "$MAIN_DIR/MainActivity.java" <<'JAVA'
           package com.sacerdotisaaime.gestao;
 
           import android.content.Intent;
@@ -2008,42 +1846,40 @@ jobs:
 
           import com.getcapacitor.BridgeActivity;
 
+          public class MainActivity extends BridgeActivity {
 
-          public class MainActivity
-            extends BridgeActivity {
+              @Override
+              public void onCreate(
+                  Bundle savedInstanceState
+              ) {
 
-            @Override
-            public void onCreate(
-              Bundle savedInstanceState
-            ) {
+                  registerPlugin(
+                      PermissionBridgePlugin.class
+                  );
 
-              registerPlugin(
-                PermissionBridgePlugin.class
-              );
+                  super.onCreate(
+                      savedInstanceState
+                  );
 
-              super.onCreate(
-                savedInstanceState
-              );
-
-              PermissionBridgePlugin.handleSharedIntent(
-                getIntent()
-              );
-            }
+                  PermissionBridgePlugin.handleSharedIntent(
+                      getIntent()
+                  );
+              }
 
 
-            @Override
-            protected void onNewIntent(
-              Intent intent
-            ) {
+              @Override
+              protected void onNewIntent(
+                  Intent intent
+              ) {
 
-              super.onNewIntent(intent);
+                  super.onNewIntent(intent);
 
-              setIntent(intent);
+                  setIntent(intent);
 
-              PermissionBridgePlugin.handleSharedIntent(
-                intent
-              );
-            }
+                  PermissionBridgePlugin.handleSharedIntent(
+                      intent
+                  );
+              }
           }
           JAVA
 
@@ -2051,189 +1887,172 @@ jobs:
 
 
       # ============================================================
-      # 16. ANDROID MANIFEST
+      # MANIFEST
       # ============================================================
 
       - name: Configurar AndroidManifest
-        shell: bash
         run: |
           set -e
 
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
 
-          python3 - "$MANIFEST" <<'PY'
+          python3 <<'PY'
           from pathlib import Path
-          import re
-          import sys
 
-          path = Path(sys.argv[1])
+          manifest = Path(
+              r"${PROJECT_DIR}/android/app/src/main/AndroidManifest.xml"
+          )
 
-          text = path.read_text(
+          text = manifest.read_text(
               encoding="utf-8"
           )
 
+          # ------------------------------------------
+          # PERMISSIONS
+          # ------------------------------------------
 
           permissions = [
-              "android.permission.READ_CONTACTS",
-              "android.permission.WRITE_CONTACTS",
-              "android.permission.RECORD_AUDIO",
-              "android.permission.CAMERA",
+              '<uses-permission android:name="android.permission.READ_CONTACTS" />',
+              '<uses-permission android:name="android.permission.WRITE_CONTACTS" />',
+              '<uses-permission android:name="android.permission.RECORD_AUDIO" />',
+              '<uses-permission android:name="android.permission.CAMERA" />',
           ]
 
-
-          marker = "<application"
-
-
-          if marker not in text:
-
-              raise SystemExit(
-                  "ERRO: <application> não encontrado."
-              )
-
-
-          additions = ""
-
-
           for permission in permissions:
-
-              if (
-                  f'android:name="{permission}"'
-                  not in text
-              ):
-
-                  additions += (
-                      f'    <uses-permission '
-                      f'android:name="{permission}" />\n'
+              if permission not in text:
+                  text = text.replace(
+                      "<application",
+                      permission + "\n\n    <application",
+                      1
                   )
 
 
-          if additions:
+          # ------------------------------------------
+          # MAIN ACTIVITY
+          # ------------------------------------------
 
-              text = text.replace(
-                  marker,
-                  additions + marker,
-                  1
-              )
-
-
-          activity_pattern = (
-              r'<activity\b'
-              r'[^>]*'
-              r'android:name="\.MainActivity"'
-              r'[^>]*>'
-              r'.*?'
-              r'</activity>'
+          activity_start = text.find(
+              '<activity android:name=".MainActivity"'
           )
 
+          if activity_start == -1:
 
-          new_activity = """
-          <activity
-              android:name=".MainActivity"
-              android:exported="true"
-              android:grantUriPermissions="true"
-              android:launchMode="singleTask">
-
-              <intent-filter>
-                  <action android:name="android.intent.action.MAIN" />
-                  <category android:name="android.intent.category.LAUNCHER" />
-              </intent-filter>
-
-              <intent-filter>
-                  <action android:name="android.intent.action.SEND" />
-                  <category android:name="android.intent.category.DEFAULT" />
-                  <data android:mimeType="audio/*" />
-              </intent-filter>
-
-              <intent-filter>
-                  <action android:name="android.intent.action.SEND_MULTIPLE" />
-                  <category android:name="android.intent.category.DEFAULT" />
-                  <data android:mimeType="audio/*" />
-              </intent-filter>
-
-              <intent-filter>
-                  <action android:name="android.intent.action.SEND" />
-                  <category android:name="android.intent.category.DEFAULT" />
-                  <data android:mimeType="image/*" />
-              </intent-filter>
-
-              <intent-filter>
-                  <action android:name="android.intent.action.SEND_MULTIPLE" />
-                  <category android:name="android.intent.category.DEFAULT" />
-                  <data android:mimeType="image/*" />
-              </intent-filter>
-
-              <intent-filter>
-                  <action android:name="android.intent.action.SEND" />
-                  <category android:name="android.intent.category.DEFAULT" />
-                  <data android:mimeType="*/*" />
-              </intent-filter>
-
-              <intent-filter>
-                  <action android:name="android.intent.action.SEND_MULTIPLE" />
-                  <category android:name="android.intent.category.DEFAULT" />
-                  <data android:mimeType="*/*" />
-              </intent-filter>
-
-          </activity>
-          """
-
-
-          match = re.search(
-              activity_pattern,
-              text,
-              flags=re.DOTALL
-          )
-
-
-          if match:
-
-              text = (
-                  text[:match.start()]
-                  + new_activity
-                  + text[match.end():]
+              activity_start = text.find(
+                  '<activity'
               )
 
+          application_end = text.find(
+              "</application>"
+          )
 
-          else:
+          activity_block = r'''
+              <activity
+                  android:name=".MainActivity"
+                  android:exported="true"
+                  android:launchMode="singleTask"
+                  android:grantUriPermissions="true">
+
+                  <intent-filter>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.LAUNCHER" />
+                  </intent-filter>
+
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="audio/*" />
+                  </intent-filter>
+
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND_MULTIPLE" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="audio/*" />
+                  </intent-filter>
+
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND_MULTIPLE" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="image/*" />
+                  </intent-filter>
+
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="*/*" />
+                  </intent-filter>
+
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND_MULTIPLE" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="*/*" />
+                  </intent-filter>
+
+              </activity>
+          '''
+
+          if activity_start != -1 and application_end != -1:
+              # Remove existing MainActivity block.
+              # This is intentionally conservative.
+              import re
+
+              pattern = re.compile(
+                  r'\s*<activity\b[^>]*android:name="\.MainActivity"[^>]*>.*?</activity>',
+                  re.DOTALL
+              )
+
+              text = pattern.sub(
+                  "",
+                  text
+              )
 
               application_end = text.find(
                   "</application>"
               )
 
+              text = (
+                  text[:application_end] +
+                  activity_block +
+                  "\n" +
+                  text[application_end:]
+              )
 
-              if application_end < 0:
-
-                  raise SystemExit(
-                      "ERRO: </application> não encontrado."
-                  )
-
+          elif application_end != -1:
 
               text = (
-                  text[:application_end]
-                  + new_activity
-                  + "\n"
-                  + text[application_end:]
+                  text[:application_end] +
+                  activity_block +
+                  "\n" +
+                  text[application_end:]
+              )
+
+          else:
+              raise SystemExit(
+                  "Não foi possível localizar </application>"
               )
 
 
-          path.write_text(
+          manifest.write_text(
               text,
               encoding="utf-8"
           )
 
-
           print(
-              "AndroidManifest configurado com sucesso."
+              "AndroidManifest.xml configurado."
           )
           PY
 
 
       # ============================================================
-      # 17. KEYSTORE
+      # KEYSTORE
       # ============================================================
 
       - name: Preparar keystore
-        shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
@@ -2241,23 +2060,21 @@ jobs:
 
           KEYSTORE="$PROJECT_DIR/android/app/release-key.jks"
 
-          printf '%s' \
-            "$ANDROID_KEYSTORE_BASE64" \
-            | base64 --decode > "$KEYSTORE"
-
-          test -s "$KEYSTORE"
+          echo "$ANDROID_KEYSTORE_BASE64" |
+            base64 --decode > "$KEYSTORE"
 
           chmod 600 "$KEYSTORE"
+
+          test -s "$KEYSTORE"
 
           echo "Keystore preparada."
 
 
       # ============================================================
-      # 18. VERSÃO E ASSINATURA
+      # VERSÃO E ASSINATURA
       # ============================================================
 
       - name: Configurar versão V120 e assinatura
-        shell: bash
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -2265,83 +2082,48 @@ jobs:
         run: |
           set -e
 
-          APP_GRADLE="$PROJECT_DIR/android/app/build.gradle"
+          BUILD_GRADLE="$PROJECT_DIR/android/app/build.gradle"
 
-          test -f "$APP_GRADLE" || {
-            echo "ERRO: build.gradle não encontrado."
-            exit 1
-          }
-
-
-          python3 - "$APP_GRADLE" <<'PY'
+          python3 - <<PY
           from pathlib import Path
           import re
-          import sys
 
-          path = Path(sys.argv[1])
+          path = Path(
+              r"$BUILD_GRADLE"
+          )
 
           text = path.read_text(
               encoding="utf-8"
           )
 
 
-          # ----------------------------------------------------------
+          # ------------------------------------------
           # VERSION CODE
-          # ----------------------------------------------------------
+          # ------------------------------------------
 
-          if re.search(
+          text = re.sub(
               r'versionCode\s+\d+',
+              'versionCode 120',
               text
-          ):
-
-              text = re.sub(
-                  r'versionCode\s+\d+',
-                  'versionCode 120',
-                  text,
-                  count=1
-              )
-
-          else:
-
-              text = text.replace(
-                  "defaultConfig {",
-                  "defaultConfig {\n        versionCode 120",
-                  1
-              )
+          )
 
 
-          # ----------------------------------------------------------
+          # ------------------------------------------
           # VERSION NAME
-          # ----------------------------------------------------------
+          # ------------------------------------------
 
-          if re.search(
+          text = re.sub(
               r'versionName\s+"[^"]+"',
+              'versionName "1.20.0"',
               text
-          ):
-
-              text = re.sub(
-                  r'versionName\s+"[^"]+"',
-                  'versionName "1.20.0"',
-                  text,
-                  count=1
-              )
-
-          else:
-
-              text = text.replace(
-                  "defaultConfig {",
-                  'defaultConfig {\n        versionName "1.20.0"',
-                  1
-              )
+          )
 
 
-          # ----------------------------------------------------------
+          # ------------------------------------------
           # SIGNING CONFIG
-          # ----------------------------------------------------------
+          # ------------------------------------------
 
-          if "signingConfigs" not in text:
-
-              signing_config = """
+          signing = '''
               signingConfigs {
                   release {
                       storeFile file("release-key.jks")
@@ -2350,209 +2132,169 @@ jobs:
                       keyPassword System.getenv("ANDROID_KEY_PASSWORD")
                   }
               }
-              """
+          '''
 
-              text = text.replace(
-                  "android {",
-                  "android {\n" + signing_config,
-                  1
+
+          if "signingConfigs {" not in text:
+
+              android_pos = text.find(
+                  "android {"
+              )
+
+              if android_pos == -1:
+                  raise SystemExit(
+                      "Bloco android não encontrado."
+                  )
+
+              insert_pos = (
+                  text.find(
+                      "\n",
+                      android_pos
+                  ) + 1
+              )
+
+              text = (
+                  text[:insert_pos] +
+                  signing +
+                  text[insert_pos:]
               )
 
 
-          # ----------------------------------------------------------
-          # RELEASE BUILD TYPE
-          # ----------------------------------------------------------
+          # ------------------------------------------
+          # RELEASE SIGNING
+          # ------------------------------------------
 
           if "signingConfig signingConfigs.release" not in text:
 
-              if re.search(
-                  r'buildTypes\s*\{',
-                  text
-              ):
+              release_pos = text.find(
+                  "buildTypes {"
+              )
 
-                  text = re.sub(
-                      r'(buildTypes\s*\{)',
-                      r'''\1
-                  release {
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                      shrinkResources false
-                  }
-                  ''',
-                      text,
-                      count=1
+              if release_pos == -1:
+                  raise SystemExit(
+                      "buildTypes não encontrado."
                   )
 
-              else:
+              release_end = text.find(
+                  "release {",
+                  release_pos
+              )
 
-                  text += """
+              if release_end == -1:
+                  raise SystemExit(
+                      "release dentro de buildTypes não encontrado."
+                  )
 
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                      shrinkResources false
-                  }
-              }
-              """
+              insert_pos = (
+                  text.find(
+                      "\n",
+                      release_end
+                  ) + 1
+              )
+
+              text = (
+                  text[:insert_pos] +
+                  "            signingConfig signingConfigs.release\n" +
+                  text[insert_pos:]
+              )
 
 
           path.write_text(
               text,
               encoding="utf-8"
           )
-
-
-          print(
-              "build.gradle configurado."
-          )
           PY
 
 
-          keytool -list \
+          echo "=================================================="
+          echo "VALIDANDO KEYSTORE"
+          echo "=================================================="
+
+          keytool \
+            -list \
             -keystore "$PROJECT_DIR/android/app/release-key.jks" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             -alias "$ANDROID_KEY_ALIAS" \
             >/dev/null
 
-
-          echo "=================================================="
-          echo "VERSIONAMENTO:"
-          echo "versionName = 1.20.0"
-          echo "versionCode = 120"
-          echo "ASSINATURA OK"
-          echo "=================================================="
+          echo "Keystore e alias válidos."
 
 
       # ============================================================
-      # 19. VALIDAR MANIFEST
+      # VALIDAR MANIFEST
       # ============================================================
 
       - name: Validar Manifest
-        shell: bash
         run: |
           set -e
 
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
 
-          grep -q \
-            'android.permission.RECORD_AUDIO' \
-            "$MANIFEST"
-
-          grep -q \
-            'android:launchMode="singleTask"' \
-            "$MANIFEST"
-
-          grep -q \
-            'android.intent.action.SEND' \
-            "$MANIFEST"
-
-          grep -q \
-            'android.intent.action.SEND_MULTIPLE' \
-            "$MANIFEST"
-
-          grep -q \
-            'android:mimeType="audio/\*"' \
-            "$MANIFEST"
-
           echo "=================================================="
-          echo "MANIFEST OK"
+          echo "VALIDANDO MANIFEST"
           echo "=================================================="
+
+          grep -q "RECORD_AUDIO" "$MANIFEST"
+          grep -q "singleTask" "$MANIFEST"
+          grep -q "SEND" "$MANIFEST"
+          grep -q "SEND_MULTIPLE" "$MANIFEST"
+          grep -q 'audio/\*' "$MANIFEST"
+
+          echo "Manifest OK."
 
 
       # ============================================================
-      # 20. VALIDAR WHATSAPP
+      # VALIDAR RECEPÇÃO WHATSAPP
       # ============================================================
 
       - name: Validar receptor WhatsApp
-        shell: bash
         run: |
           set -e
 
           MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
-
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
-
-          test -f "$MAIN"
-          test -f "$BRIDGE"
-
-
-          grep -q \
-            'handleSharedIntent' \
-            "$MAIN"
-
-
-          grep -q \
-            'getIntent' \
-            "$MAIN"
-
-
-          grep -q \
-            'onNewIntent' \
-            "$MAIN"
-
-
-          grep -q \
-            'ACTION_SEND_MULTIPLE' \
-            "$BRIDGE"
-
-
-          grep -q \
-            'EXTRA_STREAM' \
-            "$BRIDGE"
-
-
-          grep -q \
-            'getClipData' \
-            "$BRIDGE"
-
-
-          grep -q \
-            'openInputStream' \
-            "$BRIDGE"
-
-
-          grep -q \
-            'shared-media-inbox' \
-            "$BRIDGE"
-
-
-          grep -q \
-            'sharedMedia' \
-            "$BRIDGE"
-
-
-          grep -q \
-            'getSharedMedia' \
-            "$BRIDGE"
-
-
-          grep -q \
-            'readSharedMedia' \
-            "$BRIDGE"
-
-
           echo "=================================================="
-          echo "RECEPTOR WHATSAPP OK"
+          echo "VALIDANDO WHATSAPP SHARE BRIDGE"
           echo "=================================================="
+
+          grep -q "handleSharedIntent" "$MAIN"
+          grep -q "getIntent" "$MAIN"
+          grep -q "onNewIntent" "$MAIN"
+
+          grep -q "ACTION_SEND_MULTIPLE" "$BRIDGE"
+          grep -q "EXTRA_STREAM" "$BRIDGE"
+          grep -q "getClipData" "$BRIDGE"
+          grep -q "openInputStream" "$BRIDGE"
+          grep -q "shared-media-inbox" "$BRIDGE"
+          grep -q "sharedMedia" "$BRIDGE"
+          grep -q "getSharedMedia" "$BRIDGE"
+          grep -q "readSharedMedia" "$BRIDGE"
+
+          # Correção da compilação Java
+          grep -q "private boolean copyFile" "$BRIDGE"
+          grep -q "catch (IOException e)" "$BRIDGE"
+
+          echo "Bridge WhatsApp OK."
+          echo "Tratamento de IOException OK."
 
 
       # ============================================================
-      # 21. BUILD
+      # MARCADOR
       # ============================================================
 
       - name: MARCADOR - INÍCIO DO GRADLE
-        shell: bash
         run: |
           echo "=================================================="
-          echo " AGORA VAI COMPILAR O APK"
-          echo " assembleRelease"
+          echo "INÍCIO DO GRADLE"
           echo "=================================================="
 
 
+      # ============================================================
+      # BUILD RELEASE
+      # ============================================================
+
       - name: Gerar APK RELEASE V120
-        shell: bash
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -2568,11 +2310,9 @@ jobs:
           echo "EXECUTANDO GRADLE"
           echo "=================================================="
 
-
           ./gradlew assembleRelease \
             --no-daemon \
             --stacktrace
-
 
           echo "=================================================="
           echo "GRADLE FINALIZADO"
@@ -2580,78 +2320,66 @@ jobs:
 
 
       # ============================================================
-      # 22. LOCALIZAR APK
+      # LOCALIZAR APK
       # ============================================================
 
       - name: Localizar APK final
-        shell: bash
         run: |
           set -e
 
-          APK="$PROJECT_DIR/android/app/build/outputs/apk/release/app-release.apk"
-
-
-          echo "APKs encontrados:"
+          echo "=================================================="
+          echo "PROCURANDO APK"
+          echo "=================================================="
 
           find "$PROJECT_DIR/android" \
             -type f \
             -name "*.apk" \
-            -print
+            -print \
+            | sort
 
+          APK="$PROJECT_DIR/android/app/build/outputs/apk/release/app-release.apk"
 
           if [ ! -f "$APK" ]; then
-
-            echo "=================================================="
-            echo "ERRO: APK NÃO ENCONTRADO"
-            echo "=================================================="
-
+            echo "ERRO: APK não encontrado:"
+            echo "$APK"
             exit 1
           fi
 
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
           echo "=================================================="
-          echo "APK ENCONTRADO:"
-          echo "$APK"
+          echo "APK ENCONTRADO"
           echo "=================================================="
-
 
           ls -lh "$APK"
 
 
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
-
-
       # ============================================================
-      # 23. VALIDAR ASSINATURA
+      # VALIDAR ASSINATURA
       # ============================================================
 
       - name: Validar assinatura do APK
-        shell: bash
         run: |
           set -e
 
-          APK="$APK_PATH"
+          echo "=================================================="
+          echo "VALIDANDO ASSINATURA"
+          echo "=================================================="
 
-
-          APKSIGNER=$(
-            find "$ANDROID_HOME/build-tools" \
-              -type f \
-              -name apksigner \
-              | sort -V \
-              | tail -n 1
-          )
-
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+            -name apksigner \
+            -type f \
+            | sort \
+            | tail -n 1)
 
           if [ -z "$APKSIGNER" ]; then
             echo "ERRO: apksigner não encontrado."
             exit 1
           fi
 
-
           "$APKSIGNER" verify \
             --verbose \
-            "$APK"
-
+            "$APK_PATH"
 
           echo "=================================================="
           echo "ASSINATURA DO APK OK"
@@ -2659,18 +2387,20 @@ jobs:
 
 
       # ============================================================
-      # 24. UPLOAD DO APK
+      # MARCADOR APK PRONTO
       # ============================================================
 
       - name: MARCADOR - APK PRONTO
-        shell: bash
         run: |
           echo "=================================================="
-          echo "APK PRONTO PARA UPLOAD"
+          echo "APK V120 PRONTO"
           echo "=================================================="
-
           ls -lh "$APK_PATH"
 
+
+      # ============================================================
+      # UPLOAD ARTIFACT
+      # ============================================================
 
       - name: Disponibilizar APK V120
         if: success()
@@ -2683,30 +2413,29 @@ jobs:
 
 
       # ============================================================
-      # 25. FINAL
+      # FINAL
       # ============================================================
 
       - name: Finalizar V120
         if: success()
-        shell: bash
         run: |
           echo "=================================================="
-          echo " V120 CONCLUÍDO COM SUCESSO"
-          echo " APK GERADO"
-          echo " APK ENVIADO COMO ARTEFATO"
+          echo "BUILD V120 CONCLUÍDO COM SUCESSO"
+          echo "=================================================="
+          echo "APK:"
+          echo "$APK_PATH"
           echo "=================================================="
 
 
       # ============================================================
-      # 26. LIMPEZA
+      # LIMPAR KEYSTORE
       # ============================================================
 
       - name: Limpar keystore temporária
         if: always()
-        shell: bash
         run: |
-          if [ -n "$PROJECT_DIR" ]; then
-            rm -f \
-              "$PROJECT_DIR/android/app/release-key.jks" \
-              2>/dev/null || true
-          fi
+          rm -f \
+            "$PROJECT_DIR/android/app/release-key.jks" \
+            || true
+
+          echo "Keystore temporária removida."
