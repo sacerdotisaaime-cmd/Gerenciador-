@@ -722,36 +722,63 @@ jobs:
               text = text.replace(marker, "".join(additions) + marker, 1)
 
           import re
-          activity_marker = 'android:name=".MainActivity"'
-          if activity_marker in text:
-              activity_start = text.rfind("<activity", 0, text.find(activity_marker) + len(activity_marker))
-              activity_end = text.find("</activity>", activity_start)
-              if activity_start >= 0 and activity_end >= 0:
-                  activity_block = text[activity_start:activity_end]
-                  # O Android precisa encontrar a Activity como destino de compartilhamento.
-                  # Declaramos explicitamente exported/grantUriPermissions e aceitamos tanto
-                  # audio/* quanto */*. O segundo filtro cobre casos em que WhatsApp/Samsung
-                  # entrega o áudio como application/octet-stream ou outro MIME genérico; o
-                  # plugin valida o conteúdo antes de importar.
-                  activity_block = re.sub(r'\s+android:exported="[^"]*"', '', activity_block)
-                  activity_block = re.sub(r'\s+android:grantUriPermissions="[^"]*"', '', activity_block)
-                  activity_block = re.sub(r'\s+android:launchMode="[^"]*"', '', activity_block)
-                  activity_block = activity_block.replace(
-                      '<activity',
-                      '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
-                      1,
-                  )
-                  # Remove filtros de compartilhamento que possam ter sido adicionados em
-                  # uma geração anterior e recria os dois filtros de forma determinística.
-                  activity_block = re.sub(
-                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
-                      '', activity_block, flags=re.S,
-                  )
-                  activity_block = re.sub(
-                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
-                      '', activity_block, flags=re.S,
-                  )
-                  intent_filter = """
+
+          # O Capacitor pode gerar a Activity como .MainActivity ou
+          # com o nome totalmente qualificado. Não dependa de uma única forma.
+          activity_match = re.search(
+              r'<activity\b[^>]*android:name="(?:\.MainActivity|[^"/]*\.MainActivity)"[^>]*>',
+              text,
+              flags=re.S,
+          )
+
+          if not activity_match:
+              raise SystemExit(
+                  "ERRO: MainActivity não encontrada no AndroidManifest.\n"
+                  + text
+              )
+
+          activity_start = activity_match.start()
+          activity_tag_end = activity_match.end()
+          activity_end = text.find("</activity>", activity_tag_end)
+
+          if activity_end < 0:
+              raise SystemExit(
+                  "ERRO: fechamento </activity> da MainActivity não encontrado."
+              )
+
+          activity_block = text[activity_start:activity_end]
+
+          # Remove atributos que possam ter vindo do template do Capacitor.
+          activity_block = re.sub(
+              r'\s+android:exported="[^"]*"', '', activity_block
+          )
+          activity_block = re.sub(
+              r'\s+android:grantUriPermissions="[^"]*"', '', activity_block
+          )
+          activity_block = re.sub(
+              r'\s+android:launchMode="[^"]*"', '', activity_block
+          )
+
+          # singleTask é necessário para que o compartilhamento recebido
+          # entre pelo onNewIntent() quando o aplicativo já estiver aberto.
+          activity_block = activity_block.replace(
+              '<activity',
+              '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
+              1,
+          )
+
+          # Remove filtros antigos de compartilhamento e recria todos de forma
+          # determinística para áudio, foto e MIME genérico.
+          activity_block = re.sub(
+              r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
+              '', activity_block, flags=re.S,
+          )
+          activity_block = re.sub(
+              r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
+              '', activity_block, flags=re.S,
+          )
+
+          intent_filter = """
                   <intent-filter>
                     <action android:name="android.intent.action.SEND" />
                     <category android:name="android.intent.category.DEFAULT" />
@@ -782,8 +809,9 @@ jobs:
                     <category android:name="android.intent.category.DEFAULT" />
                     <data android:mimeType="*/*" />
                   </intent-filter>"""
-                  activity_block = activity_block + intent_filter
-                  text = text[:activity_start] + activity_block + text[activity_end:]
+
+          activity_block += intent_filter
+          text = text[:activity_start] + activity_block + text[activity_end:]
           manifest.write_text(text)
           PY
 
