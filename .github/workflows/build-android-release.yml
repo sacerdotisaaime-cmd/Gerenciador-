@@ -644,6 +644,53 @@ jobs:
               JSONObject listed=new JSONObject(http("GET",url,token,null,null));JSONArray files=listed.optJSONArray("files");if(files==null)return 0;int deleted=0;while(files.length()>5){JSONObject oldest=files.getJSONObject(0);if(oldest.getString("id").equals(keepId)){oldest=files.getJSONObject(1);}String id=oldest.getString("id");http("DELETE","https://www.googleapis.com/drive/v3/files/"+urlEncode(id),token,null,null);deleted++;JSONArray next=new JSONArray();for(int i=0;i<files.length();i++)if(!files.getJSONObject(i).getString("id").equals(id))next.put(files.getJSONObject(i));files=next;}return deleted;
             }
 
+            private JSONArray listDriveBackups(String token) throws Exception {
+              String root=findOrCreateFolder(token,"Gestão Sacerdotista Aimê",null);
+              String backups=findOrCreateFolder(token,"Backups",root);
+              String q="'"+backups+"' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'";
+              String url="https://www.googleapis.com/drive/v3/files?q="+urlEncode(q)+"&pageSize=100&orderBy=createdTime desc&fields=files(id,name,size,createdTime,modifiedTime,mimeType)";
+              JSONObject listed=new JSONObject(http("GET",url,token,null,null));
+              return listed.optJSONArray("files") == null ? new JSONArray() : listed.getJSONArray("files");
+            }
+
+            @PluginMethod public void listGoogleDriveBackups(PluginCall call) {
+              if(googleAccessToken==null||googleAccessToken.isEmpty()) {
+                Identity.getAuthorizationClient(getActivity()).authorize(driveAuthorizationRequest()).addOnSuccessListener(result->{
+                  if(result.hasResolution()){JSObject r=new JSObject();r.put("ok",false);r.put("needsAuthorization",true);r.put("message","Conecte o Google Drive antes de listar os backups.");call.resolve(r);return;}
+                  googleAccessToken=result.getAccessToken();
+                  driveExecutor.execute(()->{ try { JSONArray files=listDriveBackups(googleAccessToken); JSArray arr=new JSArray(); for(int i=0;i<files.length();i++){JSONObject f=files.getJSONObject(i);JSObject item=new JSObject();item.put("id",f.optString("id"));item.put("name",f.optString("name"));item.put("size",f.optLong("size",0));item.put("createdTime",f.optString("createdTime"));arr.put(item);} JSObject r=new JSObject();r.put("ok",true);r.put("items",arr);call.resolve(r); } catch(Exception ex){call.reject("DRIVE_LIST_FAILED",ex.getMessage()==null?"Falha ao listar backups do Google Drive":ex.getMessage());} });
+                }).addOnFailureListener(e->call.reject("DRIVE_AUTH_FAILED",e.getMessage()==null?"Falha ao autorizar o Drive":e.getMessage()));
+                return;
+              }
+              final String token=googleAccessToken;
+              driveExecutor.execute(()->{ try { JSONArray files=listDriveBackups(token); JSArray arr=new JSArray(); for(int i=0;i<files.length();i++){JSONObject f=files.getJSONObject(i);JSObject item=new JSObject();item.put("id",f.optString("id"));item.put("name",f.optString("name"));item.put("size",f.optLong("size",0));item.put("createdTime",f.optString("createdTime"));arr.put(item);} JSObject r=new JSObject();r.put("ok",true);r.put("items",arr);call.resolve(r); } catch(Exception ex){call.reject("DRIVE_LIST_FAILED",ex.getMessage()==null?"Falha ao listar backups do Google Drive":ex.getMessage());} });
+            }
+
+            private JSONObject downloadDriveBackup(String token,String fileId) throws Exception {
+              if(fileId==null||fileId.isEmpty()) throw new IllegalArgumentException("ID do backup não informado.");
+              JSONObject meta=getDriveFile(token,fileId);
+              String name=meta.optString("name","backup.zip").replaceAll("[^a-zA-Z0-9._-]","_");
+              File out=new File(getContext().getCacheDir(),"google-drive-"+System.currentTimeMillis()+"-"+name);
+              HttpURLConnection c=(HttpURLConnection)new URL("https://www.googleapis.com/drive/v3/files/"+urlEncode(fileId)+"?alt=media").openConnection();
+              c.setRequestMethod("GET");c.setConnectTimeout(30000);c.setReadTimeout(180000);c.setRequestProperty("Authorization","Bearer "+token);
+              int code=c.getResponseCode(); if(code<200||code>=300) throw new IllegalStateException("Falha ao baixar backup do Drive (HTTP "+code+").");
+              try(InputStream input=c.getInputStream();FileOutputStream output=new FileOutputStream(out)){byte[] buffer=new byte[8192];int n;while((n=input.read(buffer))!=-1)output.write(buffer,0,n);}
+              JSONObject r=new JSONObject();r.put("path",out.getName());r.put("fileName",meta.optString("name",name));r.put("size",out.length());return r;
+            }
+
+            @PluginMethod public void downloadGoogleDriveBackup(PluginCall call) {
+              String fileId=call.getString("fileId",""); if(fileId.isEmpty()){call.reject("DRIVE_FILE_ID_MISSING","ID do backup não informado.");return;}
+              if(googleAccessToken==null||googleAccessToken.isEmpty()) {
+                Identity.getAuthorizationClient(getActivity()).authorize(driveAuthorizationRequest()).addOnSuccessListener(result->{
+                  if(result.hasResolution()){JSObject r=new JSObject();r.put("ok",false);r.put("message","Conecte o Google Drive antes de importar o backup.");call.resolve(r);return;}
+                  googleAccessToken=result.getAccessToken(); driveExecutor.execute(()->{try{JSONObject downloaded=downloadDriveBackup(googleAccessToken,fileId);downloaded.put("ok",true);call.resolve(downloaded);}catch(Exception ex){call.reject("DRIVE_DOWNLOAD_FAILED",ex.getMessage()==null?"Falha ao baixar o backup do Google Drive":ex.getMessage());}});
+                }).addOnFailureListener(e->call.reject("DRIVE_AUTH_FAILED",e.getMessage()==null?"Falha ao autorizar o Drive":e.getMessage()));
+                return;
+              }
+              final String token=googleAccessToken;
+              driveExecutor.execute(()->{try{JSONObject downloaded=downloadDriveBackup(token,fileId);downloaded.put("ok",true);call.resolve(downloaded);}catch(Exception ex){call.reject("DRIVE_DOWNLOAD_FAILED",ex.getMessage()==null?"Falha ao baixar o backup do Google Drive":ex.getMessage());}});
+            }
+
             @PluginMethod public void uploadBackupToGoogleDrive(PluginCall call) {
               String uriString=call.getString("uri","");String fileName=call.getString("fileName","gestao-sacerdotista-aime-backup.zip");if(uriString.isEmpty()){call.reject("DRIVE_URI_MISSING","Arquivo de backup não informado.");return;}
               if(googleAccessToken==null||googleAccessToken.isEmpty()){
@@ -977,6 +1024,8 @@ jobs:
           MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
           grep -q 'connectGoogleDrive' "$PLUGIN"
           grep -q 'uploadBackupToGoogleDrive' "$PLUGIN"
+          grep -q 'listGoogleDriveBackups' "$PLUGIN"
+          grep -q 'downloadGoogleDriveBackup' "$PLUGIN"
           grep -q 'handleGoogleAuthorizationResult' "$MAIN"
           grep -q 'play-services-auth:21.6.0' "$PROJECT_DIR/android/app/build.gradle"
           echo "OK: Google Drive nativo + OAuth + upload + dependência presentes."
