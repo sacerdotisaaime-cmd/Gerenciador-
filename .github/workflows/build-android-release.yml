@@ -74,7 +74,6 @@ jobs:
         shell: bash
         run: |
           set -e
-
           PROJECT_PACKAGE=$(find app -name package.json -not -path "*/node_modules/*" -print | head -n 1)
 
           if [ -z "$PROJECT_PACKAGE" ]; then
@@ -91,7 +90,6 @@ jobs:
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
           node <<'NODE'
@@ -177,6 +175,7 @@ jobs:
 
           import android.Manifest;
           import android.content.Intent;
+          import android.content.SharedPreferences;
           import android.net.Uri;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
@@ -188,6 +187,7 @@ jobs:
           import java.io.FileOutputStream;
           import java.io.InputStream;
           import java.util.ArrayList;
+          import java.util.List;
 
           import com.getcapacitor.JSObject;
           import com.getcapacitor.JSArray;
@@ -203,19 +203,13 @@ jobs:
           @CapacitorPlugin(
             name = "PermissionBridge",
             permissions = {
-              @Permission(
-                alias = "contacts",
-                strings = {
-                  Manifest.permission.READ_CONTACTS,
-                  Manifest.permission.WRITE_CONTACTS
-                }
-              ),
-              @Permission(
-                alias = "microphone",
-                strings = {
-                  Manifest.permission.RECORD_AUDIO
-                }
-              )
+              @Permission(alias = "contacts", strings = {
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.WRITE_CONTACTS
+              }),
+              @Permission(alias = "microphone", strings = {
+                Manifest.permission.RECORD_AUDIO
+              })
             }
           )
           public class PermissionBridgePlugin extends Plugin {
@@ -278,7 +272,9 @@ jobs:
                     .getContentResolver()
                     .query(
                       uri,
-                      new String[]{OpenableColumns.DISPLAY_NAME},
+                      new String[]{
+                        OpenableColumns.DISPLAY_NAME
+                      },
                       null,
                       null,
                       null
@@ -301,8 +297,13 @@ jobs:
 
             private String b64(String value) {
               return Base64.encodeToString(
-                (value == null ? "" : value)
-                  .getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                (
+                  value == null
+                    ? ""
+                    : value
+                ).getBytes(
+                  java.nio.charset.StandardCharsets.UTF_8
+                ),
                 Base64.URL_SAFE |
                 Base64.NO_WRAP |
                 Base64.NO_PADDING
@@ -312,7 +313,10 @@ jobs:
             private String unb64(String value) {
               try {
                 return new String(
-                  Base64.decode(value, Base64.URL_SAFE),
+                  Base64.decode(
+                    value,
+                    Base64.URL_SAFE
+                  ),
                   java.nio.charset.StandardCharsets.UTF_8
                 );
               } catch (Exception ignored) {
@@ -321,7 +325,10 @@ jobs:
             }
 
             private String[] parse(File file) {
-              return file.getName().split("__", -1);
+              return file.getName().split(
+                "__",
+                -1
+              );
             }
 
             private JSObject metadata(File file) {
@@ -345,7 +352,9 @@ jobs:
                   "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
                   java.util.Locale.US
                 ).format(
-                  new java.util.Date(file.lastModified())
+                  new java.util.Date(
+                    file.lastModified()
+                  )
                 )
               );
 
@@ -353,18 +362,26 @@ jobs:
             }
 
             private File findById(String id) {
-              if (id == null || id.trim().isEmpty()) {
+              if (
+                id == null ||
+                id.trim().isEmpty()
+              ) {
                 return null;
               }
 
-              File[] files = inboxDir().listFiles();
+              File[] files =
+                inboxDir().listFiles();
 
               if (files == null) {
                 return null;
               }
 
               for (File file : files) {
-                if (file.getName().startsWith(id + "__")) {
+                if (
+                  file.getName().startsWith(
+                    id + "__"
+                  )
+                ) {
                   return file;
                 }
               }
@@ -381,7 +398,11 @@ jobs:
                 return false;
               }
 
-              for (int i = 0; i < signature.length; i++) {
+              for (
+                int i = 0;
+                i < signature.length;
+                i++
+              ) {
                 if (
                   (data[i] & 0xff) !=
                   (signature[i] & 0xff)
@@ -393,8 +414,9 @@ jobs:
               return true;
             }
 
-            private String sniffKindAndMime(File file)
-                throws Exception {
+            private String sniffKindAndMime(
+              File file
+            ) throws Exception {
 
               byte[] h = new byte[64];
               int len = 0;
@@ -469,7 +491,7 @@ jobs:
                 return "photo|image/webp";
               }
 
-              // Ogg / Opus
+              // Ogg/Opus
               if (
                 startsWith(
                   h,
@@ -502,7 +524,7 @@ jobs:
                 return "audio|audio/wav";
               }
 
-              // MP3 ID3
+              // MP3 com ID3
               if (
                 startsWith(
                   h,
@@ -524,7 +546,7 @@ jobs:
                 return "audio|audio/mpeg";
               }
 
-              // HEIC / HEIF / M4A / M4B
+              // HEIC/HEIF/M4A/M4B
               if (
                 len >= 12 &&
                 h[4] == 'f' &&
@@ -634,21 +656,19 @@ jobs:
                 : "bin";
             }
 
-            /*
-             * CORREÇÃO PRINCIPAL:
-             * throws Exception permite que as exceções
-             * de FileInputStream/FileOutputStream sejam
-             * tratadas pelo try/catch de handleSharedIntent().
-             */
-            private void storeUri(Uri uri)
-                throws Exception {
+            private void storeUri(
+              Uri uri
+            ) throws Exception {
 
               if (uri == null) {
                 return;
               }
 
-              String mime = typeFor(uri);
-              String name = displayName(uri);
+              String mime =
+                typeFor(uri);
+
+              String name =
+                displayName(uri);
 
               String lowerName =
                 name == null
@@ -713,7 +733,8 @@ jobs:
                   );
                 }
 
-                byte[] buffer = new byte[8192];
+                byte[] buffer =
+                  new byte[8192];
 
                 int read;
 
@@ -757,7 +778,8 @@ jobs:
               String sniff = null;
 
               try {
-                sniff = sniffKindAndMime(temp);
+                sniff =
+                  sniffKindAndMime(temp);
               } catch (Exception ignored) {
               }
 
@@ -779,6 +801,7 @@ jobs:
                 photo &&
                 total > MAX_PHOTO_BYTES
               ) {
+
                 try {
                   temp.delete();
                 } catch (Exception ignored) {
@@ -793,6 +816,7 @@ jobs:
               }
 
               if (!audio && !photo) {
+
                 try {
                   temp.delete();
                 } catch (Exception ignored) {
@@ -809,7 +833,10 @@ jobs:
               if (sniff != null) {
 
                 String[] parts =
-                  sniff.split("\\|", 2);
+                  sniff.split(
+                    "\\|",
+                    2
+                  );
 
                 if (parts.length == 2) {
 
@@ -862,15 +889,17 @@ jobs:
                 name.trim().isEmpty()
               ) {
                 name =
-                  (
-                    audio
-                      ? "audio-whatsapp."
-                      : "foto-whatsapp."
-                  ) +
-                  extensionFor(
-                    mime,
-                    name
-                  );
+                  audio
+                    ? "audio-whatsapp." +
+                      extensionFor(
+                        mime,
+                        name
+                      )
+                    : "foto-whatsapp." +
+                      extensionFor(
+                        mime,
+                        name
+                      );
               }
 
               String id =
@@ -1530,10 +1559,7 @@ jobs:
                 savedInstanceState
               );
 
-              PermissionBridgePlugin
-                .handleSharedIntent(
-                  getIntent()
-                );
+              PermissionBridgePlugin.handleSharedIntent(getIntent());
             }
 
             @Override
@@ -1545,10 +1571,7 @@ jobs:
 
               setIntent(intent);
 
-              PermissionBridgePlugin
-                .handleSharedIntent(
-                  intent
-                );
+              PermissionBridgePlugin.handleSharedIntent(intent);
             }
           }
           JAVA
@@ -1665,31 +1688,26 @@ jobs:
                       '                    <category android:name="android.intent.category.DEFAULT" />\n'
                       '                    <data android:mimeType="audio/*" />\n'
                       '                  </intent-filter>\n'
-
                       '                  <intent-filter>\n'
                       '                    <action android:name="android.intent.action.SEND_MULTIPLE" />\n'
                       '                    <category android:name="android.intent.category.DEFAULT" />\n'
                       '                    <data android:mimeType="audio/*" />\n'
                       '                  </intent-filter>\n'
-
                       '                  <intent-filter>\n'
                       '                    <action android:name="android.intent.action.SEND" />\n'
                       '                    <category android:name="android.intent.category.DEFAULT" />\n'
                       '                    <data android:mimeType="image/*" />\n'
                       '                  </intent-filter>\n'
-
                       '                  <intent-filter>\n'
                       '                    <action android:name="android.intent.action.SEND_MULTIPLE" />\n'
                       '                    <category android:name="android.intent.category.DEFAULT" />\n'
                       '                    <data android:mimeType="image/*" />\n'
                       '                  </intent-filter>\n'
-
                       '                  <intent-filter>\n'
                       '                    <action android:name="android.intent.action.SEND" />\n'
                       '                    <category android:name="android.intent.category.DEFAULT" />\n'
                       '                    <data android:mimeType="*/*" />\n'
                       '                  </intent-filter>\n'
-
                       '                  <intent-filter>\n'
                       '                    <action android:name="android.intent.action.SEND_MULTIPLE" />\n'
                       '                    <category android:name="android.intent.category.DEFAULT" />\n'
@@ -1946,15 +1964,15 @@ jobs:
 
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
-          grep -q \
-            'PermissionBridgePlugin.handleSharedIntent(getIntent())' \
+          grep -Fq \
+            'PermissionBridgePlugin.handleSharedIntent(getIntent());' \
             "$MAIN" || {
               echo "ERRO: MainActivity não processa o Intent inicial."
               exit 1
             }
 
-          grep -q \
-            'PermissionBridgePlugin.handleSharedIntent(intent)' \
+          grep -Fq \
+            'PermissionBridgePlugin.handleSharedIntent(intent);' \
             "$MAIN" || {
               echo "ERRO: onNewIntent não encaminha o compartilhamento."
               exit 1
@@ -2033,6 +2051,9 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -e
+
+          # As variáveis precisam estar disponíveis NESTA etapa,
+          # porque é aqui que o Gradle lê System.getenv(...).
 
           test -n "$ANDROID_KEYSTORE_PASSWORD" || {
             echo "ERRO: ANDROID_KEYSTORE_PASSWORD não chegou ao Gradle."
