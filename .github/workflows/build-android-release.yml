@@ -1569,10 +1569,7 @@ jobs:
           additions = []
 
           for permission in permissions:
-              if (
-                  f'android:name="{permission}"'
-                  not in text
-              ):
+              if f'android:name="{permission}"' not in text:
                   additions.append(
                       f'    <uses-permission android:name="{permission}" />\n'
                   )
@@ -1584,81 +1581,72 @@ jobs:
                   1
               )
 
-          activity_marker =
-              'android:name=".MainActivity"'
+          activity_marker = 'android:name=".MainActivity"'
 
           if activity_marker in text:
 
-              activity_marker_pos =
-                  text.find(activity_marker)
+              activity_marker_pos = text.find(
+                  activity_marker
+              )
 
-              activity_start =
-                  text.rfind(
-                      "<activity",
-                      0,
-                      activity_marker_pos
-                  )
+              activity_start = text.rfind(
+                  "<activity",
+                  0,
+                  activity_marker_pos
+              )
 
-              activity_end =
-                  text.find(
-                      "</activity>",
-                      activity_start
-                  )
+              activity_end = text.find(
+                  "</activity>",
+                  activity_start
+              )
 
               if (
                   activity_start >= 0 and
                   activity_end >= 0
               ):
 
-                  activity_block =
-                      text[
-                          activity_start:
-                          activity_end
-                      ]
+                  activity_block = text[
+                      activity_start:
+                      activity_end
+                  ]
 
-                  activity_block =
-                      re.sub(
-                          r'\s+android:exported="[^"]*"',
-                          '',
-                          activity_block
-                      )
+                  activity_block = re.sub(
+                      r'\s+android:exported="[^"]*"',
+                      '',
+                      activity_block
+                  )
 
-                  activity_block =
-                      re.sub(
-                          r'\s+android:grantUriPermissions="[^"]*"',
-                          '',
-                          activity_block
-                      )
+                  activity_block = re.sub(
+                      r'\s+android:grantUriPermissions="[^"]*"',
+                      '',
+                      activity_block
+                  )
 
-                  activity_block =
-                      re.sub(
-                          r'\s+android:launchMode="[^"]*"',
-                          '',
-                          activity_block
-                      )
+                  activity_block = re.sub(
+                      r'\s+android:launchMode="[^"]*"',
+                      '',
+                      activity_block
+                  )
 
-                  activity_block =
-                      activity_block.replace(
-                          '<activity',
-                          '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
-                          1
-                      )
+                  activity_block = activity_block.replace(
+                      '<activity',
+                      '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
+                      1
+                  )
 
-                  activity_block =
-                      re.sub(
-                          r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
-                          '',
-                          activity_block,
-                          flags=re.S
-                      )
+                  activity_block = re.sub(
+                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
+                      '',
+                      activity_block,
+                      flags=re.S
+                  )
 
-                  activity_block =
-                      re.sub(
-                          r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
-                          '',
-                          activity_block,
-                          flags=re.S
-                      )
+                  activity_block = re.sub(
+                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
+                      '',
+                      activity_block,
+                      flags=re.S
+                  )
 
                   intent_filter = """
                   <intent-filter>
@@ -1695,10 +1683,11 @@ jobs:
 
                   activity_block += intent_filter
 
-                  text =
-                      text[:activity_start] +
-                      activity_block +
-                      text[activity_end:]
+                  text = (
+                      text[:activity_start]
+                      + activity_block
+                      + text[activity_end:]
+                  )
 
           manifest.write_text(text)
           PY
@@ -1793,11 +1782,10 @@ jobs:
                   1
               )
 
-          build_types =
-              re.search(
-                  r'buildTypes\s*\{',
-                  text
-              )
+          build_types = re.search(
+              r'buildTypes\s*\{',
+              text
+          )
 
           if not build_types:
 
@@ -1812,29 +1800,29 @@ jobs:
 
           else:
 
-              tail =
-                  text[
-                      build_types.end():
-                  ]
+              tail = text[
+                  build_types.end():
+              ]
 
-              release =
-                  re.search(
-                      r'release\s*\{',
-                      tail
-                  )
+              release = re.search(
+                  r'release\s*\{',
+                  tail
+              )
 
               if not release:
 
-                  pos =
-                      build_types.end()
+                  pos = build_types.end()
 
-                  text =
-                      text[:pos] + '''
+                  text = (
+                      text[:pos]
+                      + '''
                   release {
                       signingConfig signingConfigs.release
                       minifyEnabled false
                   }
-                  ''' + text[pos:]
+                  '''
+                      + text[pos:]
+                  )
 
               elif (
                   'signingConfig signingConfigs.release'
@@ -1845,15 +1833,19 @@ jobs:
                   ]
               ):
 
-                  pos =
+                  pos = (
                       build_types.end() +
                       release.end()
+                  )
 
-                  text =
-                      text[:pos] + '''
+                  text = (
+                      text[:pos]
+                      + '''
                       signingConfig signingConfigs.release
                       minifyEnabled false
-                  ''' + text[pos:]
+                  '''
+                      + text[pos:]
+                  )
 
           path.write_text(text)
           PY
