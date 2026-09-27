@@ -13,19 +13,18 @@ jobs:
     steps:
 
       # ============================================================
-      # 1 - BAIXAR PROJETO
+      # 1. CHECKOUT
       # ============================================================
 
       - name: Baixar projeto
         uses: actions/checkout@v4
 
-      - name: MARCADOR - WORKFLOW V120
+      - name: MARCADOR - V120 INICIADO
         shell: bash
         run: |
           echo "=================================================="
-          echo "GESTÃO SACERDOTISTA AIMÊ - V120"
-          echo "WHATSAPP AUDIO SHARE"
-          echo "WORKFLOW INICIADO"
+          echo " GESTÃO SACERDOTISTA AIMÊ - V120"
+          echo " WHATSAPP AUDIO SHARE"
           echo "=================================================="
           echo "Commit: $GITHUB_SHA"
           echo "Run: $GITHUB_RUN_NUMBER"
@@ -33,7 +32,7 @@ jobs:
 
 
       # ============================================================
-      # 2 - NODE
+      # 2. NODE
       # ============================================================
 
       - name: Configurar Node.js
@@ -43,7 +42,7 @@ jobs:
 
 
       # ============================================================
-      # 3 - JAVA
+      # 3. JAVA
       # ============================================================
 
       - name: Configurar Java
@@ -54,7 +53,7 @@ jobs:
 
 
       # ============================================================
-      # 4 - VALIDAR SECRETS
+      # 4. SECRETS
       # ============================================================
 
       - name: Validar secrets de assinatura
@@ -87,11 +86,11 @@ jobs:
             exit 1
           }
 
-          echo "Secrets de assinatura reconhecidas."
+          echo "Secrets de assinatura OK."
 
 
       # ============================================================
-      # 5 - ENCONTRAR ZIP
+      # 5. ENCONTRAR ZIP
       # ============================================================
 
       - name: Encontrar ZIP do projeto
@@ -111,19 +110,19 @@ jobs:
           COUNT="${#ZIPS[@]}"
 
           if [ "$COUNT" -eq 0 ]; then
-            echo "ERRO: nenhum ZIP foi encontrado."
+            echo "ERRO: nenhum ZIP encontrado."
             exit 1
           fi
 
           if [ "$COUNT" -gt 1 ]; then
-            echo "ERRO: foram encontrados vários ZIPs."
+            echo "ERRO: mais de um ZIP encontrado:"
             printf '%s\n' "${ZIPS[@]}"
             exit 1
           fi
 
           ZIP_FILE="${ZIPS[0]}"
 
-          echo "ZIP selecionado:"
+          echo "ZIP:"
           echo "$ZIP_FILE"
 
           ls -lh "$ZIP_FILE"
@@ -132,7 +131,7 @@ jobs:
 
 
       # ============================================================
-      # 6 - DESCOMPACTAR
+      # 6. DESCOMPACTAR
       # ============================================================
 
       - name: Descompactar projeto
@@ -141,6 +140,7 @@ jobs:
           set -e
 
           rm -rf app
+
           mkdir -p app
 
           unzip -q "$ZIP_FILE" -d app
@@ -149,7 +149,7 @@ jobs:
 
 
       # ============================================================
-      # 7 - LOCALIZAR PROJETO
+      # 7. LOCALIZAR PROJETO
       # ============================================================
 
       - name: Localizar projeto
@@ -170,16 +170,16 @@ jobs:
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PROJECT_PACKAGE")
+          PROJECT_DIR="$(dirname "$PROJECT_PACKAGE")"
 
-          echo "Projeto localizado em:"
+          echo "PROJECT_DIR:"
           echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
 
       # ============================================================
-      # 8 - AJUSTAR DEPENDÊNCIAS
+      # 8. AJUSTAR DEPENDÊNCIAS
       # ============================================================
 
       - name: Ajustar dependências
@@ -190,30 +190,30 @@ jobs:
           cd "$PROJECT_DIR"
 
           node <<'NODE'
-          const fs = require('fs');
+          const fs = require("fs");
 
-          const file = 'package.json';
+          const file = "package.json";
 
           const pkg = JSON.parse(
-            fs.readFileSync(file, 'utf8')
+            fs.readFileSync(file, "utf8")
           );
 
           const deps =
             pkg.dependencies ||
             (pkg.dependencies = {});
 
-          deps['@capacitor/core'] = '^7.4.3';
-          deps['@capacitor/android'] = '^7.4.3';
-          deps['@capacitor/camera'] = '^7.0.5';
-          deps['@capacitor/share'] = '^7.0.2';
-          deps['@capacitor/filesystem'] = '^7.0.2';
-          deps['@capacitor-community/contacts'] = '7.2.0';
-          deps['capacitor-voice-recorder'] = '7.0.6';
-          deps['@capacitor/barcode-scanner'] = '2.0.4';
+          deps["@capacitor/core"] = "^7.4.3";
+          deps["@capacitor/android"] = "^7.4.3";
+          deps["@capacitor/camera"] = "^7.0.5";
+          deps["@capacitor/share"] = "^7.0.2";
+          deps["@capacitor/filesystem"] = "^7.0.2";
+          deps["@capacitor-community/contacts"] = "7.2.0";
+          deps["capacitor-voice-recorder"] = "7.0.6";
+          deps["@capacitor/barcode-scanner"] = "2.0.4";
 
           fs.writeFileSync(
             file,
-            JSON.stringify(pkg, null, 2) + '\n'
+            JSON.stringify(pkg, null, 2) + "\n"
           );
           NODE
 
@@ -224,7 +224,7 @@ jobs:
 
 
       # ============================================================
-      # 9 - INSTALAR DEPENDÊNCIAS
+      # 9. INSTALAR
       # ============================================================
 
       - name: Instalar dependências
@@ -242,7 +242,7 @@ jobs:
 
 
       # ============================================================
-      # 10 - BUILD WEB
+      # 10. BUILD WEB
       # ============================================================
 
       - name: Compilar aplicação web
@@ -258,7 +258,7 @@ jobs:
 
 
       # ============================================================
-      # 11 - ADICIONAR ANDROID
+      # 11. ANDROID
       # ============================================================
 
       - name: Adicionar Android
@@ -270,11 +270,11 @@ jobs:
 
           npx cap add android
 
-          echo "Projeto Android criado."
+          echo "Android adicionado."
 
 
       # ============================================================
-      # 12 - AJUSTAR SDK
+      # 12. SDK
       # ============================================================
 
       - name: Ajustar SDK Android
@@ -290,11 +290,11 @@ jobs:
               "$VARIABLES"
           fi
 
-          echo "SDK Android ajustado."
+          echo "SDK Android configurado."
 
 
       # ============================================================
-      # 13 - CAPACITOR SYNC
+      # 13. CAPACITOR SYNC
       # ============================================================
 
       - name: Sincronizar Capacitor
@@ -310,7 +310,7 @@ jobs:
 
 
       # ============================================================
-      # 14 - PERMISSION BRIDGE
+      # 14. PERMISSION BRIDGE
       # ============================================================
 
       - name: Criar PermissionBridge
@@ -318,11 +318,11 @@ jobs:
         run: |
           set -e
 
-          ANDROID_SRC="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao"
+          SRC="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao"
 
-          mkdir -p "$ANDROID_SRC"
+          mkdir -p "$SRC"
 
-          cat > "$ANDROID_SRC/PermissionBridgePlugin.java" <<'JAVA'
+          cat > "$SRC/PermissionBridgePlugin.java" <<'JAVA'
           package com.sacerdotisaaime.gestao;
 
           import android.Manifest;
@@ -333,7 +333,6 @@ jobs:
           import android.provider.Settings;
           import android.util.Base64;
 
-          import java.io.ByteArrayOutputStream;
           import java.io.File;
           import java.io.FileInputStream;
           import java.io.FileOutputStream;
@@ -469,7 +468,6 @@ jobs:
                     }
 
                   } finally {
-
                     cursor.close();
                   }
                 }
@@ -517,9 +515,7 @@ jobs:
             }
 
 
-            private JSObject metadata(
-              File file
-            ) {
+            private JSObject metadata(File file) {
 
               JSObject result =
                 new JSObject();
@@ -532,10 +528,7 @@ jobs:
                 return result;
               }
 
-              result.put(
-                "id",
-                parts[0]
-              );
+              result.put("id", parts[0]);
 
               result.put(
                 "mimeType",
@@ -573,9 +566,7 @@ jobs:
             }
 
 
-            private File findById(
-              String id
-            ) {
+            private File findById(String id) {
 
               if (
                 id == null ||
@@ -595,9 +586,7 @@ jobs:
 
                 if (
                   file.getName()
-                    .startsWith(
-                      id + "__"
-                    )
+                    .startsWith(id + "__")
                 ) {
                   return file;
                 }
@@ -638,9 +627,8 @@ jobs:
             }
 
 
-            private String sniff(
-              File file
-            ) throws Exception {
+            private String sniff(File file)
+              throws Exception {
 
               byte[] h =
                 new byte[64];
@@ -676,7 +664,6 @@ jobs:
               }
 
 
-              // JPEG
               if (
                 length >= 3 &&
                 (h[0] & 0xff) == 0xff &&
@@ -687,7 +674,6 @@ jobs:
               }
 
 
-              // PNG
               if (
                 startsWith(
                   h,
@@ -706,7 +692,6 @@ jobs:
               }
 
 
-              // WEBP
               if (
                 length >= 12 &&
                 startsWith(
@@ -726,7 +711,6 @@ jobs:
               }
 
 
-              // OGG / OPUS
               if (
                 startsWith(
                   h,
@@ -741,7 +725,6 @@ jobs:
               }
 
 
-              // WAV
               if (
                 length >= 12 &&
                 startsWith(
@@ -761,7 +744,6 @@ jobs:
               }
 
 
-              // MP3 ID3
               if (
                 startsWith(
                   h,
@@ -775,7 +757,6 @@ jobs:
               }
 
 
-              // MP3 frame
               if (
                 length >= 2 &&
                 (h[0] & 0xff) == 0xff &&
@@ -785,7 +766,6 @@ jobs:
               }
 
 
-              // HEIC / M4A
               if (
                 length >= 12 &&
                 h[4] == 'f' &&
@@ -822,7 +802,6 @@ jobs:
               }
 
 
-              // WEBM
               if (
                 startsWith(
                   h,
@@ -904,9 +883,7 @@ jobs:
             }
 
 
-            private void receive(
-              Uri uri
-            ) {
+            private void receive(Uri uri) {
 
               if (uri == null) {
                 return;
@@ -1100,7 +1077,6 @@ jobs:
                       "application/octet-stream"
                     )
                   ) {
-
                     mime = parts[1];
                   }
 
@@ -1511,8 +1487,8 @@ jobs:
 
               try {
 
-                ByteArrayOutputStream output =
-                  new ByteArrayOutputStream();
+                java.io.ByteArrayOutputStream output =
+                  new java.io.ByteArrayOutputStream();
 
 
                 try (
@@ -1538,8 +1514,14 @@ jobs:
                 }
 
 
+                String[] parts =
+                  file.getName()
+                    .split("__", -1);
+
                 String mime =
-                  getMimeFromMetadata(file);
+                  parts.length >= 2
+                    ? decode(parts[1])
+                    : "application/octet-stream";
 
 
                 JSObject result =
@@ -1570,23 +1552,6 @@ jobs:
             }
 
 
-            private String getMimeFromMetadata(
-              File file
-            ) {
-
-              String[] parts =
-                file.getName()
-                  .split("__", -1);
-
-              if (parts.length >= 2) {
-
-                return decode(parts[1]);
-              }
-
-              return "application/octet-stream";
-            }
-
-
             @PluginMethod
             public void deleteSharedMedia(
               PluginCall call
@@ -1600,7 +1565,6 @@ jobs:
 
               File file =
                 findById(id);
-
 
               JSObject result =
                 new JSObject();
@@ -1621,9 +1585,7 @@ jobs:
             ) {
 
               if (
-                getPermissionState(
-                  "contacts"
-                ) ==
+                getPermissionState("contacts") ==
                 PermissionState.GRANTED
               ) {
 
@@ -1660,9 +1622,7 @@ jobs:
             ) {
 
               boolean granted =
-                getPermissionState(
-                  "contacts"
-                ) ==
+                getPermissionState("contacts") ==
                 PermissionState.GRANTED;
 
 
@@ -1691,9 +1651,7 @@ jobs:
             ) {
 
               if (
-                getPermissionState(
-                  "microphone"
-                ) ==
+                getPermissionState("microphone") ==
                 PermissionState.GRANTED
               ) {
 
@@ -1730,9 +1688,7 @@ jobs:
             ) {
 
               boolean granted =
-                getPermissionState(
-                  "microphone"
-                ) ==
+                getPermissionState("microphone") ==
                 PermissionState.GRANTED;
 
 
@@ -1819,7 +1775,7 @@ jobs:
 
 
       # ============================================================
-      # 15 - MAIN ACTIVITY
+      # 15. MAIN ACTIVITY
       # ============================================================
 
       - name: Configurar MainActivity
@@ -1880,7 +1836,7 @@ jobs:
 
 
       # ============================================================
-      # 16 - MANIFEST
+      # 16. MANIFEST
       # ============================================================
 
       - name: Configurar AndroidManifest
@@ -1897,7 +1853,9 @@ jobs:
 
           path = Path(sys.argv[1])
 
-          text = path.read_text()
+          text = path.read_text(
+              encoding="utf-8"
+          )
 
           permissions = [
               "android.permission.READ_CONTACTS",
@@ -1913,16 +1871,21 @@ jobs:
                   "ERRO: <application> não encontrado."
               )
 
+
           additions = ""
 
           for permission in permissions:
 
-              if f'android:name="{permission}"' not in text:
+              if (
+                  f'android:name="{permission}"'
+                  not in text
+              ):
 
                   additions += (
                       f'    <uses-permission '
                       f'android:name="{permission}" />\n'
                   )
+
 
           if additions:
 
@@ -1934,7 +1897,8 @@ jobs:
 
 
           activity_pattern = (
-              r'<activity\b[^>]*'
+              r'<activity\b'
+              r'[^>]*'
               r'android:name="\.MainActivity"'
               r'[^>]*>'
               r'.*?'
@@ -2011,8 +1975,9 @@ jobs:
 
           else:
 
-              application_end =
-                  text.find("</application>")
+              application_end = text.find(
+                  "</application>"
+              )
 
 
               if application_end < 0:
@@ -2030,16 +1995,19 @@ jobs:
               )
 
 
-          path.write_text(text)
+          path.write_text(
+              text,
+              encoding="utf-8"
+          )
 
           print(
-              "AndroidManifest configurado."
+              "AndroidManifest configurado com sucesso."
           )
           PY
 
 
       # ============================================================
-      # 17 - KEYSTORE
+      # 17. KEYSTORE
       # ============================================================
 
       - name: Preparar keystore
@@ -2063,7 +2031,7 @@ jobs:
 
 
       # ============================================================
-      # 18 - VERSÃO + ASSINATURA
+      # 18. CONFIGURAR VERSÃO E ASSINATURA
       # ============================================================
 
       - name: Configurar versão V120 e assinatura
@@ -2090,7 +2058,9 @@ jobs:
 
           path = Path(sys.argv[1])
 
-          text = path.read_text()
+          text = path.read_text(
+              encoding="utf-8"
+          )
 
 
           # ----------------------------------------------------------
@@ -2098,12 +2068,12 @@ jobs:
           # ----------------------------------------------------------
 
           if re.search(
-              r'versionCode\s+["\']?\d+["\']?',
+              r'versionCode\s+\d+',
               text
           ):
 
               text = re.sub(
-                  r'versionCode\s+["\']?\d+["\']?',
+                  r'versionCode\s+\d+',
                   'versionCode 120',
                   text,
                   count=1
@@ -2112,8 +2082,8 @@ jobs:
           else:
 
               text = text.replace(
-                  'defaultConfig {',
-                  'defaultConfig {\n        versionCode 120',
+                  "defaultConfig {",
+                  "defaultConfig {\n        versionCode 120",
                   1
               )
 
@@ -2123,12 +2093,12 @@ jobs:
           # ----------------------------------------------------------
 
           if re.search(
-              r'versionName\s+["\'][^"\']+["\']',
+              r'versionName\s+"[^"]+"',
               text
           ):
 
               text = re.sub(
-                  r'versionName\s+["\'][^"\']+["\']',
+                  r'versionName\s+"[^"]+"',
                   'versionName "1.20.0"',
                   text,
                   count=1
@@ -2137,7 +2107,7 @@ jobs:
           else:
 
               text = text.replace(
-                  'defaultConfig {',
+                  "defaultConfig {",
                   'defaultConfig {\n        versionName "1.20.0"',
                   1
               )
@@ -2147,9 +2117,9 @@ jobs:
           # SIGNING CONFIG
           # ----------------------------------------------------------
 
-          if 'signingConfigs' not in text:
+          if "signingConfigs" not in text:
 
-              signing = '''
+              signing_config = """
               signingConfigs {
                   release {
                       storeFile file("release-key.jks")
@@ -2158,78 +2128,61 @@ jobs:
                       keyPassword System.getenv("ANDROID_KEY_PASSWORD")
                   }
               }
-              '''
+              """
 
               text = text.replace(
-                  'android {',
-                  'android {' + signing,
-                  1
-              )
-
-          elif 'signingConfigs.release' not in text:
-
-              signing = '''
-                  release {
-                      storeFile file("release-key.jks")
-                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-                  }
-              '''
-
-              text = text.replace(
-                  'signingConfigs {',
-                  'signingConfigs {' + signing,
+                  "android {",
+                  "android {\n" + signing_config,
                   1
               )
 
 
           # ----------------------------------------------------------
-          # BUILD TYPE RELEASE
+          # RELEASE BUILD TYPE
           # ----------------------------------------------------------
 
-          if 'signingConfig signingConfigs.release' not in text:
+          if "signingConfig signingConfigs.release" not in text:
 
-              release_match = re.search(
+              if re.search(
                   r'buildTypes\s*\{',
                   text
-              )
+              ):
 
-              if release_match:
-
-                  pos = release_match.end()
-
-                  text = (
-                      text[:pos]
-                      +
-                      '''
+                  text = re.sub(
+                      r'(buildTypes\s*\{)',
+                      r'''\1
                   release {
                       signingConfig signingConfigs.release
                       minifyEnabled false
                       shrinkResources false
                   }
-                  '''
-                      +
-                      text[pos:]
+                  ''',
+                      text,
+                      count=1
                   )
 
               else:
 
-                  text += '''
-                  
-                  buildTypes {
-                      release {
-                          signingConfig signingConfigs.release
-                          minifyEnabled false
-                          shrinkResources false
-                      }
+                  text += """
+
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                      shrinkResources false
                   }
-                  '''
+              }
+              """
 
 
-          path.write_text(text)
+          path.write_text(
+              text,
+              encoding="utf-8"
+          )
 
-          print("build.gradle configurado.")
+          print(
+              "build.gradle configurado."
+          )
           PY
 
 
@@ -2241,103 +2194,74 @@ jobs:
 
 
           echo "=================================================="
-          echo "VERSÃO:"
+          echo "VERSIONAMENTO:"
           echo "versionName = 1.20.0"
           echo "versionCode = 120"
-          echo "ASSINATURA VALIDADA"
+          echo "ASSINATURA OK"
           echo "=================================================="
 
 
       # ============================================================
-      # 19 - VALIDAR MANIFEST
+      # 19. VALIDAR MANIFEST
       # ============================================================
 
-      - name: Validar Manifest antes do build
+      - name: Validar Manifest
         shell: bash
         run: |
           set -e
 
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
 
-
-          echo "Verificando permissões..."
-
-
-          grep -q \
-            'android.permission.READ_CONTACTS' \
-            "$MANIFEST"
-
-
-          grep -q \
-            'android.permission.WRITE_CONTACTS' \
-            "$MANIFEST"
+          echo "Validando Manifest..."
 
 
           grep -q \
             'android.permission.RECORD_AUDIO' \
-            "$MANIFEST"
-
-
-          grep -q \
-            'android.permission.CAMERA' \
-            "$MANIFEST"
-
-
-          echo "Verificando singleTask..."
+            "$MANIFEST" || {
+              echo "ERRO: RECORD_AUDIO não encontrado."
+              exit 1
+            }
 
 
           grep -q \
             'android:launchMode="singleTask"' \
-            "$MANIFEST"
-
-
-          echo "Verificando SEND..."
+            "$MANIFEST" || {
+              echo "ERRO: singleTask não encontrado."
+              exit 1
+            }
 
 
           grep -q \
             'android.intent.action.SEND' \
-            "$MANIFEST"
-
-
-          echo "Verificando SEND_MULTIPLE..."
+            "$MANIFEST" || {
+              echo "ERRO: SEND não encontrado."
+              exit 1
+            }
 
 
           grep -q \
             'android.intent.action.SEND_MULTIPLE' \
-            "$MANIFEST"
-
-
-          echo "Verificando audio/*..."
+            "$MANIFEST" || {
+              echo "ERRO: SEND_MULTIPLE não encontrado."
+              exit 1
+            }
 
 
           grep -q \
             'android:mimeType="audio/\*"' \
-            "$MANIFEST"
-
-
-          echo "Verificando image/*..."
-
-
-          grep -q \
-            'android:mimeType="image/\*"' \
-            "$MANIFEST"
-
-
-          echo "Verificando */*..."
-
-
-          grep -q \
-            'android:mimeType="\*/\*"' \
-            "$MANIFEST"
+            "$MANIFEST" || {
+              echo "ERRO: audio/* não encontrado."
+              exit 1
+            }
 
 
           echo "=================================================="
-          echo "MANIFEST VALIDADO COM SUCESSO"
+          echo "MANIFEST OK"
           echo "=================================================="
 
 
       # ============================================================
-      # 20 - VALIDAR RECEPÇÃO WHATSAPP
+      # 20. VALIDAR WHATSAPP
       # ============================================================
 
       - name: Validar receptor de áudio WhatsApp
@@ -2350,28 +2274,22 @@ jobs:
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
 
-          echo "Verificando arquivos..."
-
-
           test -f "$MAIN" || {
-            echo "ERRO: MainActivity.java não encontrado."
+            echo "ERRO: MainActivity não encontrada."
             exit 1
           }
 
 
           test -f "$BRIDGE" || {
-            echo "ERRO: PermissionBridgePlugin.java não encontrado."
+            echo "ERRO: PermissionBridge não encontrado."
             exit 1
           }
-
-
-          echo "Verificando Intent inicial..."
 
 
           grep -q \
             'handleSharedIntent' \
             "$MAIN" || {
-              echo "ERRO: handleSharedIntent não encontrado."
+              echo "ERRO: handleSharedIntent ausente."
               exit 1
             }
 
@@ -2379,130 +2297,103 @@ jobs:
           grep -q \
             'getIntent' \
             "$MAIN" || {
-              echo "ERRO: getIntent não encontrado."
+              echo "ERRO: getIntent ausente."
               exit 1
             }
-
-
-          echo "Verificando onNewIntent..."
 
 
           grep -q \
             'onNewIntent' \
             "$MAIN" || {
-              echo "ERRO: onNewIntent não encontrado."
+              echo "ERRO: onNewIntent ausente."
               exit 1
             }
-
-
-          echo "Verificando SEND_MULTIPLE..."
 
 
           grep -q \
             'ACTION_SEND_MULTIPLE' \
             "$BRIDGE" || {
-              echo "ERRO: ACTION_SEND_MULTIPLE não encontrado."
+              echo "ERRO: ACTION_SEND_MULTIPLE ausente."
               exit 1
             }
-
-
-          echo "Verificando EXTRA_STREAM..."
 
 
           grep -q \
             'EXTRA_STREAM' \
             "$BRIDGE" || {
-              echo "ERRO: EXTRA_STREAM não encontrado."
+              echo "ERRO: EXTRA_STREAM ausente."
               exit 1
             }
-
-
-          echo "Verificando ClipData..."
 
 
           grep -q \
             'getClipData' \
             "$BRIDGE" || {
-              echo "ERRO: getClipData não encontrado."
+              echo "ERRO: getClipData ausente."
               exit 1
             }
-
-
-          echo "Verificando openInputStream..."
 
 
           grep -q \
             'openInputStream' \
             "$BRIDGE" || {
-              echo "ERRO: openInputStream não encontrado."
+              echo "ERRO: openInputStream ausente."
               exit 1
             }
-
-
-          echo "Verificando inbox persistente..."
 
 
           grep -q \
             'shared-media-inbox' \
             "$BRIDGE" || {
-              echo "ERRO: shared-media-inbox não encontrado."
+              echo "ERRO: shared-media-inbox ausente."
               exit 1
             }
-
-
-          echo "Verificando evento sharedMedia..."
 
 
           grep -q \
             'sharedMedia' \
             "$BRIDGE" || {
-              echo "ERRO: sharedMedia não encontrado."
+              echo "ERRO: sharedMedia ausente."
               exit 1
             }
-
-
-          echo "Verificando getSharedMedia..."
 
 
           grep -q \
             'getSharedMedia' \
             "$BRIDGE" || {
-              echo "ERRO: getSharedMedia não encontrado."
+              echo "ERRO: getSharedMedia ausente."
               exit 1
             }
-
-
-          echo "Verificando readSharedMedia..."
 
 
           grep -q \
             'readSharedMedia' \
             "$BRIDGE" || {
-              echo "ERRO: readSharedMedia não encontrado."
+              echo "ERRO: readSharedMedia ausente."
               exit 1
             }
 
 
           echo "=================================================="
-          echo "RECEPTOR WHATSAPP VALIDADO COM SUCESSO"
+          echo "RECEPTOR WHATSAPP OK"
           echo "=================================================="
 
 
       # ============================================================
-      # 21 - MARCADOR ANTES DO GRADLE
+      # 21. INÍCIO DO GRADLE
       # ============================================================
 
       - name: MARCADOR - INÍCIO DO GRADLE
         shell: bash
         run: |
           echo "=================================================="
-          echo "AGORA VAI COMPILAR O APK"
-          echo "assembleRelease"
+          echo " AGORA VAI COMPILAR O APK"
+          echo " assembleRelease"
           echo "=================================================="
 
 
       # ============================================================
-      # 22 - GERAR APK
+      # 22. BUILD RELEASE
       # ============================================================
 
       - name: Gerar APK RELEASE V120
@@ -2514,30 +2405,9 @@ jobs:
         run: |
           set -e
 
-
-          test -n "$ANDROID_KEYSTORE_PASSWORD" || {
-            echo "ERRO: senha da keystore não chegou."
-            exit 1
-          }
-
-
-          test -n "$ANDROID_KEY_ALIAS" || {
-            echo "ERRO: alias não chegou."
-            exit 1
-          }
-
-
-          test -n "$ANDROID_KEY_PASSWORD" || {
-            echo "ERRO: senha da chave não chegou."
-            exit 1
-          }
-
-
           cd "$PROJECT_DIR/android"
 
-
           chmod +x gradlew
-
 
           echo "=================================================="
           echo "EXECUTANDO GRADLE"
@@ -2550,12 +2420,12 @@ jobs:
 
 
           echo "=================================================="
-          echo "GRADLE CONCLUÍDO COM SUCESSO"
+          echo "GRADLE FINALIZADO"
           echo "=================================================="
 
 
       # ============================================================
-      # 23 - LOCALIZAR APK
+      # 23. LOCALIZAR APK
       # ============================================================
 
       - name: Localizar APK final
@@ -2563,11 +2433,10 @@ jobs:
         run: |
           set -e
 
-
           APK="$PROJECT_DIR/android/app/build/outputs/apk/release/app-release.apk"
 
 
-          echo "Procurando APK..."
+          echo "APKs encontrados:"
 
 
           find "$PROJECT_DIR/android" \
@@ -2579,7 +2448,7 @@ jobs:
           if [ ! -f "$APK" ]; then
 
             echo "=================================================="
-            echo "ERRO: APK RELEASE NÃO ENCONTRADO"
+            echo "ERRO: APK NÃO ENCONTRADO"
             echo "=================================================="
 
             exit 1
@@ -2587,7 +2456,8 @@ jobs:
 
 
           echo "=================================================="
-          echo "APK ENCONTRADO"
+          echo "APK ENCONTRADO:"
+          echo "$APK"
           echo "=================================================="
 
 
@@ -2598,14 +2468,13 @@ jobs:
 
 
       # ============================================================
-      # 24 - VALIDAR ASSINATURA
+      # 24. VALIDAR ASSINATURA
       # ============================================================
 
       - name: Validar assinatura do APK
         shell: bash
         run: |
           set -e
-
 
           APK="$APK_PATH"
 
@@ -2619,10 +2488,10 @@ jobs:
           )
 
 
-          test -n "$APKSIGNER" || {
+          if [ -z "$APKSIGNER" ]; then
             echo "ERRO: apksigner não encontrado."
             exit 1
-          }
+          fi
 
 
           "$APKSIGNER" verify \
@@ -2631,110 +2500,23 @@ jobs:
 
 
           echo "=================================================="
-          echo "ASSINATURA DO APK VALIDADA"
+          echo "ASSINATURA DO APK OK"
           echo "=================================================="
 
 
       # ============================================================
-      # 25 - VALIDAR APK
-      # ============================================================
-
-      - name: Validar conteúdo do APK
-        shell: bash
-        run: |
-          set -e
-
-
-          APK="$APK_PATH"
-
-
-          AAPT=$(
-            find "$ANDROID_HOME/build-tools" \
-              -type f \
-              -name aapt \
-              | sort -V \
-              | tail -n 1
-          )
-
-
-          test -n "$AAPT" || {
-            echo "ERRO: aapt não encontrado."
-            exit 1
-          }
-
-
-          echo "Permissões do APK:"
-
-
-          "$AAPT" dump permissions "$APK"
-
-
-          FINAL_MANIFEST="/tmp/final-v120-manifest.txt"
-
-
-          "$AAPT" dump xmltree \
-            "$APK" \
-            AndroidManifest.xml \
-            > "$FINAL_MANIFEST"
-
-
-          echo "Verificando Manifest final..."
-
-
-          grep -q \
-            'singleTask' \
-            "$FINAL_MANIFEST" || {
-              echo "ERRO: singleTask não encontrado no APK."
-              exit 1
-            }
-
-
-          grep -q \
-            'SEND' \
-            "$FINAL_MANIFEST" || {
-              echo "ERRO: SEND não encontrado no APK."
-              exit 1
-            }
-
-
-          grep -q \
-            'SEND_MULTIPLE' \
-            "$FINAL_MANIFEST" || {
-              echo "ERRO: SEND_MULTIPLE não encontrado no APK."
-              exit 1
-            }
-
-
-          grep -q \
-            'grantUriPermissions' \
-            "$FINAL_MANIFEST" || {
-              echo "ERRO: grantUriPermissions não encontrado."
-              exit 1
-            }
-
-
-          echo "=================================================="
-          echo "APK VALIDADO COM SUCESSO"
-          echo "=================================================="
-
-
-      # ============================================================
-      # 26 - MARCADOR UPLOAD
+      # 25. UPLOAD DO APK
       # ============================================================
 
       - name: MARCADOR - APK PRONTO
         shell: bash
         run: |
           echo "=================================================="
-          echo "APK PRONTO PARA SER ENVIADO"
+          echo "APK PRONTO PARA UPLOAD"
           echo "=================================================="
 
           ls -lh "$APK_PATH"
 
-
-      # ============================================================
-      # 27 - UPLOAD DO APK
-      # ============================================================
 
       - name: Disponibilizar APK V120
         if: success()
@@ -2747,7 +2529,7 @@ jobs:
 
 
       # ============================================================
-      # 28 - FINAL
+      # 26. FINAL
       # ============================================================
 
       - name: Finalizar V120
@@ -2755,14 +2537,14 @@ jobs:
         shell: bash
         run: |
           echo "=================================================="
-          echo "V120 CONCLUÍDO"
-          echo "APK GERADO"
-          echo "APK ENVIADO COMO ARTEFATO"
+          echo " V120 CONCLUÍDO COM SUCESSO"
+          echo " APK GERADO"
+          echo " APK ENVIADO COMO ARTEFATO"
           echo "=================================================="
 
 
       # ============================================================
-      # 29 - LIMPEZA
+      # 27. LIMPEZA
       # ============================================================
 
       - name: Limpar keystore temporária
