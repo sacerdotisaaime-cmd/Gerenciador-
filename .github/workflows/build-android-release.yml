@@ -33,17 +33,43 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -e
-          test -n "$ANDROID_KEYSTORE_BASE64" || { echo "ERRO: ANDROID_KEYSTORE_BASE64 vazio"; exit 1; }
-          test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo "ERRO: ANDROID_KEYSTORE_PASSWORD vazio"; exit 1; }
-          test -n "$ANDROID_KEY_ALIAS" || { echo "ERRO: ANDROID_KEY_ALIAS vazio"; exit 1; }
-          test -n "$ANDROID_KEY_PASSWORD" || { echo "ERRO: ANDROID_KEY_PASSWORD vazio"; exit 1; }
+
+          test -n "$ANDROID_KEYSTORE_BASE64" || {
+            echo "ERRO: ANDROID_KEYSTORE_BASE64 vazio"
+            exit 1
+          }
+
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || {
+            echo "ERRO: ANDROID_KEYSTORE_PASSWORD vazio"
+            exit 1
+          }
+
+          test -n "$ANDROID_KEY_ALIAS" || {
+            echo "ERRO: ANDROID_KEY_ALIAS vazio"
+            exit 1
+          }
+
+          test -n "$ANDROID_KEY_PASSWORD" || {
+            echo "ERRO: ANDROID_KEY_PASSWORD vazio"
+            exit 1
+          }
+
           echo "Secrets de assinatura reconhecidas."
 
       - name: Encontrar ZIP do projeto
         shell: bash
         run: |
           set -e
-          mapfile -t ZIPS < <(find . -maxdepth 2 -type f -iname "*.zip" ! -path "./.git/*" | sort)
+
+          mapfile -t ZIPS < <(
+            find . \
+              -maxdepth 2 \
+              -type f \
+              -iname "*.zip" \
+              ! -path "./.git/*" |
+            sort
+          )
+
           COUNT="${#ZIPS[@]}"
 
           if [ "$COUNT" -eq 0 ]; then
@@ -58,23 +84,34 @@ jobs:
           fi
 
           ZIP_FILE="${ZIPS[0]}"
+
           echo "ZIP selecionado: $ZIP_FILE"
           ls -lh "$ZIP_FILE"
+
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
       - name: Descompactar projeto
         shell: bash
         run: |
           set -e
+
           rm -rf app
           mkdir -p app
+
           unzip -q "$ZIP_FILE" -d app
 
       - name: Localizar projeto
         shell: bash
         run: |
           set -e
-          PROJECT_PACKAGE=$(find app -name package.json -not -path "*/node_modules/*" -print | head -n 1)
+
+          PROJECT_PACKAGE=$(
+            find app \
+              -name package.json \
+              -not -path "*/node_modules/*" \
+              -print |
+            head -n 1
+          )
 
           if [ -z "$PROJECT_PACKAGE" ]; then
             echo "ERRO: package.json não encontrado."
@@ -90,14 +127,21 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           node <<'NODE'
           const fs = require('fs');
 
           const file = 'package.json';
-          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-          const deps = pkg.dependencies || (pkg.dependencies = {});
+
+          const pkg = JSON.parse(
+            fs.readFileSync(file, 'utf8')
+          );
+
+          const deps =
+            pkg.dependencies ||
+            (pkg.dependencies = {});
 
           deps['@capacitor/core'] = '^7.4.3';
           deps['@capacitor/android'] = '^7.4.3';
@@ -121,6 +165,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           npm install
@@ -130,6 +175,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           npx vite build
@@ -138,6 +184,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           npx cap add android
@@ -150,13 +197,16 @@ jobs:
           VARIABLES="$PROJECT_DIR/android/variables.gradle"
 
           if [ -f "$VARIABLES" ]; then
-            sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 26/' "$VARIABLES"
+            sed -i \
+              's/minSdkVersion = [0-9]*/minSdkVersion = 26/' \
+              "$VARIABLES"
           fi
 
       - name: Sincronizar Capacitor
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           npx cap sync android
@@ -217,7 +267,8 @@ jobs:
             private static boolean initialSyncClaimed = false;
             private static boolean sharedLaunch = false;
 
-            private static final String INBOX_DIR = "shared-media-inbox";
+            private static final String INBOX_DIR =
+                "shared-media-inbox";
 
             private static final long MAX_AUDIO_BYTES =
                 50L * 1024L * 1024L;
@@ -2080,11 +2131,6 @@ jobs:
 
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
-      # ============================================================
-      # NOVA ETAPA:
-      # OBTÉM O SHA-1 DO CERTIFICADO DO APK RELEASE
-      # ============================================================
-
       - name: Obter SHA-1 do APK release
         shell: bash
         run: |
@@ -2097,14 +2143,28 @@ jobs:
             exit 1
           }
 
+          APKSIGNER=$(
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name apksigner |
+            sort -V |
+            tail -n 1
+          )
+
+          test -n "$APKSIGNER" || {
+            echo "ERRO: apksigner não encontrado."
+            exit 1
+          }
+
           echo ""
           echo "======================================"
-          echo "SHA-1 DO CERTIFICADO DO APK RELEASE"
+          echo "CERTIFICADO DO APK RELEASE"
           echo "======================================"
 
-          keytool -printcert \
-            -jarfile "$APK" |
-            grep -E "SHA1:|SHA-1:"
+          "$APKSIGNER" \
+            verify \
+            --print-certs \
+            "$APK"
 
           echo "======================================"
           echo ""
