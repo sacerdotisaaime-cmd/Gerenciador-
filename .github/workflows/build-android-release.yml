@@ -175,7 +175,6 @@ jobs:
 
           import android.Manifest;
           import android.content.Intent;
-          import android.content.SharedPreferences;
           import android.net.Uri;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
@@ -186,8 +185,6 @@ jobs:
           import java.io.FileInputStream;
           import java.io.FileOutputStream;
           import java.io.InputStream;
-          import java.util.ArrayList;
-          import java.util.List;
 
           import com.getcapacitor.JSObject;
           import com.getcapacitor.JSArray;
@@ -2083,6 +2080,35 @@ jobs:
 
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
+      # ============================================================
+      # NOVA ETAPA:
+      # OBTÉM O SHA-1 DO CERTIFICADO DO APK RELEASE
+      # ============================================================
+
+      - name: Obter SHA-1 do APK release
+        shell: bash
+        run: |
+          set -e
+
+          APK="$APK_PATH"
+
+          test -f "$APK" || {
+            echo "ERRO: APK não encontrado para obter o SHA-1."
+            exit 1
+          }
+
+          echo ""
+          echo "======================================"
+          echo "SHA-1 DO CERTIFICADO DO APK RELEASE"
+          echo "======================================"
+
+          keytool -printcert \
+            -jarfile "$APK" |
+            grep -E "SHA1:|SHA-1:"
+
+          echo "======================================"
+          echo ""
+
       - name: Validar permissões do APK
         shell: bash
         run: |
@@ -2115,9 +2141,9 @@ jobs:
             grep -q \
               "$FULL" \
               /tmp/apk-permissions.txt || {
-                echo "ERRO: $FULL não está no APK."
-                exit 1
-              }
+              echo "ERRO: $FULL não está no APK."
+              exit 1
+            }
 
             echo "OK NO APK: $FULL"
           done
@@ -2142,44 +2168,44 @@ jobs:
           grep -q \
             'audio/\*' \
             "$FINAL_MANIFEST" || {
-              echo "ERRO: audio/* não encontrado no APK."
-              exit 1
-            }
+            echo "ERRO: audio/* não encontrado no APK."
+            exit 1
+          }
 
           grep -q \
             'image/\*' \
             "$FINAL_MANIFEST" || {
-              echo "ERRO: image/* não encontrado no APK."
-              exit 1
-            }
+            echo "ERRO: image/* não encontrado no APK."
+            exit 1
+          }
 
           grep -q \
             '\*/\*' \
             "$FINAL_MANIFEST" || {
-              echo "ERRO: */* não encontrado no APK."
-              exit 1
-            }
+            echo "ERRO: */* não encontrado no APK."
+            exit 1
+          }
 
           grep -q \
             'android.intent.action.SEND' \
             "$FINAL_MANIFEST" || {
-              echo "ERRO: ACTION_SEND não encontrado no APK."
-              exit 1
-            }
+            echo "ERRO: ACTION_SEND não encontrado no APK."
+            exit 1
+          }
 
           grep -q \
             'android.intent.action.SEND_MULTIPLE' \
             "$FINAL_MANIFEST" || {
-              echo "ERRO: ACTION_SEND_MULTIPLE não encontrado no APK."
-              exit 1
-            }
+            echo "ERRO: ACTION_SEND_MULTIPLE não encontrado no APK."
+            exit 1
+          }
 
           grep -q \
             'grantUriPermissions' \
             "$FINAL_MANIFEST" || {
-              echo "ERRO: grantUriPermissions não encontrado no APK."
-              exit 1
-            }
+            echo "ERRO: grantUriPermissions não encontrado no APK."
+            exit 1
+          }
 
           echo "OK NO APK: singleTask + grantUriPermissions + SEND + SEND_MULTIPLE + áudio + foto + MIME genérico"
 
