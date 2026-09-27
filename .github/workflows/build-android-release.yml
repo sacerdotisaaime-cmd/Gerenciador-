@@ -277,9 +277,9 @@ jobs:
               return null;
             }
 
-            private boolean startsWith(byte[] data, int len, byte... signature) {
+            private boolean startsWith(byte[] data, int len, int... signature) {
               if (len < signature.length) return false;
-              for (int i = 0; i < signature.length; i++) if (data[i] != signature[i]) return false;
+              for (int i = 0; i < signature.length; i++) if ((data[i] & 0xFF) != (signature[i] & 0xFF)) return false;
               return true;
             }
 
@@ -577,15 +577,15 @@ jobs:
               if(instance==null || requestCode!=GOOGLE_AUTH_REQUEST_CODE) return false;
               PluginCall call=instance.pendingGoogleAuthCall; instance.pendingGoogleAuthCall=null;
               if(call==null) return true;
-              if(resultCode!=android.app.Activity.RESULT_OK || data==null){call.resolve(diagnosticResult("GOOGLE_AUTH_CANCELLED", "authorization-result", "A autorização do Google foi cancelada ou fechada.", null));return true;}
+              if(resultCode!=android.app.Activity.RESULT_OK || data==null){call.resolve(instance.diagnosticResult("GOOGLE_AUTH_CANCELLED", "authorization-result", "A autorização do Google foi cancelada ou fechada.", null));return true;}
               try {
                 AuthorizationResult result=Identity.getAuthorizationClient(instance.getActivity()).getAuthorizationResultFromIntent(data);
                 String token=result.getAccessToken();
-                if(token==null||token.isEmpty()){call.resolve(diagnosticResult("GOOGLE_TOKEN_EMPTY", "authorization-result", "O Google não retornou um token de acesso.", null));return true;}
+                if(token==null||token.isEmpty()){call.resolve(instance.diagnosticResult("GOOGLE_TOKEN_EMPTY", "authorization-result", "O Google não retornou um token de acesso.", null));return true;}
                 instance.googleAccessToken=token;
                 JSObject r=new JSObject();r.put("authorized",true);call.resolve(r);
               } catch(Exception ex){
-                call.resolve(diagnosticResult(ex instanceof ApiException ? "GMS_" + ((ApiException) ex).getStatusCode() : "GOOGLE_AUTH_RESULT_FAILED", "authorization-result", "Falha ao concluir a autorização do Google.", ex));
+                call.resolve(instance.diagnosticResult(ex instanceof ApiException ? "GMS_" + ((ApiException) ex).getStatusCode() : "GOOGLE_AUTH_RESULT_FAILED", "authorization-result", "Falha ao concluir a autorização do Google.", ex));
               }
               return true;
             }
@@ -833,8 +833,8 @@ jobs:
           path = Path(sys.argv[1])
           text = path.read_text()
 
-          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.19.0"', text, count=1)
-          text = re.sub(r'versionCode\s+\d+', 'versionCode 119', text, count=1)
+          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.31.0"', text, count=1)
+          text = re.sub(r'versionCode\s+\d+', 'versionCode 131', text, count=1)
 
           if 'signingConfigs {' not in text:
               signing = '''
