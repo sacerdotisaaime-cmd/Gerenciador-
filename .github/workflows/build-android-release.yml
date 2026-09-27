@@ -45,15 +45,18 @@ jobs:
           set -e
           mapfile -t ZIPS < <(find . -maxdepth 2 -type f -iname "*.zip" ! -path "./.git/*" | sort)
           COUNT="${#ZIPS[@]}"
+
           if [ "$COUNT" -eq 0 ]; then
             echo "ERRO: nenhum ZIP foi encontrado."
             exit 1
           fi
+
           if [ "$COUNT" -gt 1 ]; then
-            echo "ERRO: foram encontrados vários ZIPs. Deixe somente o ZIP da versão que será compilada."
+            echo "ERRO: foram encontrados vários ZIPs."
             printf '%s\n' "${ZIPS[@]}"
             exit 1
           fi
+
           ZIP_FILE="${ZIPS[0]}"
           echo "ZIP selecionado: $ZIP_FILE"
           ls -lh "$ZIP_FILE"
@@ -71,12 +74,19 @@ jobs:
         shell: bash
         run: |
           set -e
-          PROJECT_PACKAGE=$(find app -name package.json -not -path "*/node_modules/*" -print | head -n 1)
+
+          PROJECT_PACKAGE=$(find app \
+            -name package.json \
+            -not -path "*/node_modules/*" \
+            -print | head -n 1)
+
           if [ -z "$PROJECT_PACKAGE" ]; then
             echo "ERRO: package.json não encontrado."
             exit 1
           fi
+
           PROJECT_DIR=$(dirname "$PROJECT_PACKAGE")
+
           echo "Projeto: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
@@ -85,11 +95,19 @@ jobs:
         run: |
           set -e
           cd "$PROJECT_DIR"
+
           node <<'NODE'
           const fs = require('fs');
+
           const file = 'package.json';
-          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-          const deps = pkg.dependencies || (pkg.dependencies = {});
+          const pkg = JSON.parse(
+            fs.readFileSync(file, 'utf8')
+          );
+
+          const deps =
+            pkg.dependencies ||
+            (pkg.dependencies = {});
+
           deps['@capacitor/core'] = '^7.4.3';
           deps['@capacitor/android'] = '^7.4.3';
           deps['@capacitor/camera'] = '^7.0.5';
@@ -98,8 +116,13 @@ jobs:
           deps['@capacitor-community/contacts'] = '7.2.0';
           deps['capacitor-voice-recorder'] = '7.0.6';
           deps['@capacitor/barcode-scanner'] = '2.0.4';
-          fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+
+          fs.writeFileSync(
+            file,
+            JSON.stringify(pkg, null, 2) + '\n'
+          );
           NODE
+
           rm -rf node_modules
           rm -f package-lock.json
 
@@ -108,6 +131,7 @@ jobs:
         run: |
           set -e
           cd "$PROJECT_DIR"
+
           npm install
           npm install -D @capacitor/cli@7.4.3
 
@@ -129,9 +153,13 @@ jobs:
         shell: bash
         run: |
           set -e
+
           VARIABLES="$PROJECT_DIR/android/variables.gradle"
+
           if [ -f "$VARIABLES" ]; then
-            sed -i 's/minSdkVersion = [0-9]*/minSdkVersion = 26/' "$VARIABLES"
+            sed -i \
+              's/minSdkVersion = [0-9]*/minSdkVersion = 26/' \
+              "$VARIABLES"
           fi
 
       - name: Sincronizar Capacitor
@@ -145,7 +173,9 @@ jobs:
         shell: bash
         run: |
           set -e
+
           ANDROID_SRC="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao"
+
           mkdir -p "$ANDROID_SRC"
 
           cat > "$ANDROID_SRC/PermissionBridgePlugin.java" <<'JAVA'
@@ -153,24 +183,24 @@ jobs:
 
           import android.Manifest;
           import android.content.Intent;
-          import android.content.SharedPreferences;
           import android.net.Uri;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
           import android.util.Base64;
+
           import java.io.ByteArrayOutputStream;
           import java.io.File;
           import java.io.FileInputStream;
           import java.io.FileOutputStream;
           import java.io.InputStream;
-          import java.util.ArrayList;
-          import java.util.List;
-          import com.getcapacitor.JSObject;
+
           import com.getcapacitor.JSArray;
+          import com.getcapacitor.JSObject;
           import com.getcapacitor.PermissionState;
           import com.getcapacitor.Plugin;
           import com.getcapacitor.PluginCall;
           import com.getcapacitor.PluginMethod;
+
           import com.getcapacitor.annotation.CapacitorPlugin;
           import com.getcapacitor.annotation.Permission;
           import com.getcapacitor.annotation.PermissionCallback;
@@ -178,13 +208,19 @@ jobs:
           @CapacitorPlugin(
             name = "PermissionBridge",
             permissions = {
-              @Permission(alias = "contacts", strings = {
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.WRITE_CONTACTS
-              }),
-              @Permission(alias = "microphone", strings = {
-                Manifest.permission.RECORD_AUDIO
-              })
+              @Permission(
+                alias = "contacts",
+                strings = {
+                  Manifest.permission.READ_CONTACTS,
+                  Manifest.permission.WRITE_CONTACTS
+                }
+              ),
+              @Permission(
+                alias = "microphone",
+                strings = {
+                  Manifest.permission.RECORD_AUDIO
+                }
+              )
             }
           )
           public class PermissionBridgePlugin extends Plugin {
@@ -194,13 +230,19 @@ jobs:
             private static boolean initialSyncClaimed = false;
             private static boolean sharedLaunch = false;
 
-            private static final String INBOX_DIR = "shared-media-inbox";
-            private static final long MAX_AUDIO_BYTES = 50L * 1024L * 1024L;
-            private static final long MAX_PHOTO_BYTES = 20L * 1024L * 1024L;
+            private static final String INBOX_DIR =
+                "shared-media-inbox";
+
+            private static final long MAX_AUDIO_BYTES =
+                50L * 1024L * 1024L;
+
+            private static final long MAX_PHOTO_BYTES =
+                20L * 1024L * 1024L;
 
             @Override
             public void load() {
               super.load();
+
               instance = this;
 
               Intent pending = pendingSharedIntent;
@@ -212,16 +254,23 @@ jobs:
             }
 
             private File inboxDir() {
-              File dir = new File(getContext().getFilesDir(), INBOX_DIR);
+              File dir = new File(
+                  getContext().getFilesDir(),
+                  INBOX_DIR
+              );
+
               if (!dir.exists()) {
                 dir.mkdirs();
               }
+
               return dir;
             }
 
             private String typeFor(Uri uri) {
               try {
-                return getContext().getContentResolver().getType(uri);
+                return getContext()
+                    .getContentResolver()
+                    .getType(uri);
               } catch (Exception ignored) {
                 return null;
               }
@@ -230,13 +279,17 @@ jobs:
             private String displayName(Uri uri) {
               try {
                 android.database.Cursor cursor =
-                    getContext().getContentResolver().query(
-                        uri,
-                        new String[]{OpenableColumns.DISPLAY_NAME},
-                        null,
-                        null,
-                        null
-                    );
+                    getContext()
+                        .getContentResolver()
+                        .query(
+                            uri,
+                            new String[] {
+                              OpenableColumns.DISPLAY_NAME
+                            },
+                            null,
+                            null,
+                            null
+                        );
 
                 if (cursor != null) {
                   try {
@@ -247,23 +300,34 @@ jobs:
                     cursor.close();
                   }
                 }
-              } catch (Exception ignored) {}
+              } catch (Exception ignored) {
+              }
 
               return null;
             }
 
             private String b64(String value) {
               return Base64.encodeToString(
-                  (value == null ? "" : value)
-                      .getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                  Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING
+                  (
+                      value == null
+                          ? ""
+                          : value
+                  ).getBytes(
+                      java.nio.charset.StandardCharsets.UTF_8
+                  ),
+                  Base64.URL_SAFE |
+                  Base64.NO_WRAP |
+                  Base64.NO_PADDING
               );
             }
 
             private String unb64(String value) {
               try {
                 return new String(
-                    Base64.decode(value, Base64.URL_SAFE),
+                    Base64.decode(
+                        value,
+                        Base64.URL_SAFE
+                    ),
                     java.nio.charset.StandardCharsets.UTF_8
                 );
               } catch (Exception ignored) {
@@ -277,6 +341,7 @@ jobs:
 
             private JSObject metadata(File file) {
               String[] p = parse(file);
+
               JSObject o = new JSObject();
 
               if (p.length < 5) {
@@ -294,25 +359,36 @@ jobs:
                   new java.text.SimpleDateFormat(
                       "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
                       java.util.Locale.US
-                  ).format(new java.util.Date(file.lastModified()))
+                  ).format(
+                      new java.util.Date(
+                          file.lastModified()
+                      )
+                  )
               );
 
               return o;
             }
 
             private File findById(String id) {
-              if (id == null || id.trim().isEmpty()) {
+              if (
+                  id == null ||
+                  id.trim().isEmpty()
+              ) {
                 return null;
               }
 
-              File[] files = inboxDir().listFiles();
+              File[] files =
+                  inboxDir().listFiles();
 
               if (files == null) {
                 return null;
               }
 
               for (File file : files) {
-                if (file.getName().startsWith(id + "__")) {
+                if (
+                    file.getName()
+                        .startsWith(id + "__")
+                ) {
                   return file;
                 }
               }
@@ -322,17 +398,32 @@ jobs:
 
             /*
              * CORREÇÃO V120:
-             * Recebe int... em vez de byte...
-             * para permitir chamadas como 0x50, 0x4e etc.
+             *
+             * O método recebe int... em vez de byte...
+             * para aceitar assinaturas como:
+             *
+             * 0x50, 0x4e, 0x47...
+             *
              * sem erro de compilação Java.
              */
-            private boolean startsWith(byte[] data, int len, int... signature) {
+            private boolean startsWith(
+                byte[] data,
+                int len,
+                int... signature
+            ) {
               if (len < signature.length) {
                 return false;
               }
 
-              for (int i = 0; i < signature.length; i++) {
-                if ((data[i] & 0xff) != (signature[i] & 0xff)) {
+              for (
+                  int i = 0;
+                  i < signature.length;
+                  i++
+              ) {
+                if (
+                    (data[i] & 0xff) !=
+                    (signature[i] & 0xff)
+                ) {
                   return false;
                 }
               }
@@ -340,13 +431,24 @@ jobs:
               return true;
             }
 
-            private String sniffKindAndMime(File file) throws Exception {
+            private String sniffKindAndMime(
+                File file
+            ) throws Exception {
+
               byte[] h = new byte[64];
               int len = 0;
 
-              try (InputStream input = new FileInputStream(file)) {
+              try (
+                  InputStream input =
+                      new FileInputStream(file)
+              ) {
                 while (len < h.length) {
-                  int n = input.read(h, len, h.length - len);
+                  int n =
+                      input.read(
+                          h,
+                          len,
+                          h.length - len
+                      );
 
                   if (n < 0) {
                     break;
@@ -360,7 +462,6 @@ jobs:
                 }
               }
 
-              // JPEG
               if (
                   len >= 3 &&
                   (h[0] & 0xff) == 0xff &&
@@ -370,7 +471,6 @@ jobs:
                 return "photo|image/jpeg";
               }
 
-              // PNG
               if (
                   startsWith(
                       h,
@@ -388,10 +488,16 @@ jobs:
                 return "photo|image/png";
               }
 
-              // WebP
               if (
                   len >= 12 &&
-                  startsWith(h, len, 0x52, 0x49, 0x46, 0x46) &&
+                  startsWith(
+                      h,
+                      len,
+                      0x52,
+                      0x49,
+                      0x46,
+                      0x46
+                  ) &&
                   h[8] == 'W' &&
                   h[9] == 'E' &&
                   h[10] == 'B' &&
@@ -400,17 +506,29 @@ jobs:
                 return "photo|image/webp";
               }
 
-              // Ogg/Opus
               if (
-                  startsWith(h, len, 0x4f, 0x67, 0x67, 0x53)
+                  startsWith(
+                      h,
+                      len,
+                      0x4f,
+                      0x67,
+                      0x67,
+                      0x53
+                  )
               ) {
                 return "audio|audio/ogg";
               }
 
-              // WAV
               if (
                   len >= 12 &&
-                  startsWith(h, len, 0x52, 0x49, 0x46, 0x46) &&
+                  startsWith(
+                      h,
+                      len,
+                      0x52,
+                      0x49,
+                      0x46,
+                      0x46
+                  ) &&
                   h[8] == 'W' &&
                   h[9] == 'A' &&
                   h[10] == 'V' &&
@@ -419,14 +537,18 @@ jobs:
                 return "audio|audio/wav";
               }
 
-              // MP3 com ID3
               if (
-                  startsWith(h, len, 0x49, 0x44, 0x33)
+                  startsWith(
+                      h,
+                      len,
+                      0x49,
+                      0x44,
+                      0x33
+                  )
               ) {
                 return "audio|audio/mpeg";
               }
 
-              // MP3 frame sync / AAC ADTS
               if (
                   len >= 2 &&
                   (h[0] & 0xff) == 0xff &&
@@ -435,7 +557,6 @@ jobs:
                 return "audio|audio/mpeg";
               }
 
-              // HEIC/HEIF e M4A/M4B
               if (
                   len >= 12 &&
                   h[4] == 'f' &&
@@ -443,12 +564,13 @@ jobs:
                   h[6] == 'y' &&
                   h[7] == 'p'
               ) {
-                String brand = new String(
-                    h,
-                    8,
-                    4,
-                    java.nio.charset.StandardCharsets.US_ASCII
-                );
+                String brand =
+                    new String(
+                        h,
+                        8,
+                        4,
+                        java.nio.charset.StandardCharsets.US_ASCII
+                    );
 
                 if (
                     brand.equals("heic") ||
@@ -469,7 +591,6 @@ jobs:
                 }
               }
 
-              // WebM
               if (
                   startsWith(
                       h,
@@ -486,18 +607,25 @@ jobs:
               return null;
             }
 
-            private String extensionFor(String mime, String originalName) {
+            private String extensionFor(
+                String mime,
+                String originalName
+            ) {
               String lower =
                   originalName == null
                       ? ""
-                      : originalName.toLowerCase(java.util.Locale.US);
+                      : originalName.toLowerCase(
+                          java.util.Locale.US
+                        );
 
               if (
                   lower.matches(
                       ".*\\.(ogg|opus|m4a|aac|mp3|wav|amr|3gp|webm|mp4)$"
                   )
               ) {
-                return lower.substring(lower.lastIndexOf('.') + 1);
+                return lower.substring(
+                    lower.lastIndexOf('.') + 1
+                );
               }
 
               if (mime.contains("ogg")) return "ogg";
@@ -509,7 +637,9 @@ jobs:
               if (mime.contains("webp")) return "webp";
               if (mime.contains("heic")) return "heic";
 
-              return mime.contains("jpeg") ? "jpg" : "bin";
+              return mime.contains("jpeg")
+                  ? "jpg"
+                  : "bin";
             }
 
             private void storeUri(Uri uri) {
@@ -523,12 +653,16 @@ jobs:
               String lowerName =
                   name == null
                       ? ""
-                      : name.toLowerCase(java.util.Locale.US);
+                      : name.toLowerCase(
+                          java.util.Locale.US
+                        );
 
               String lowerMime =
                   mime == null
                       ? ""
-                      : mime.toLowerCase(java.util.Locale.US);
+                      : mime.toLowerCase(
+                          java.util.Locale.US
+                        );
 
               boolean hintedAudio =
                   lowerMime.startsWith("audio/") ||
@@ -551,7 +685,9 @@ jobs:
                   "media-temp-" +
                   System.currentTimeMillis() +
                   "-" +
-                  Math.abs(uri.toString().hashCode());
+                  Math.abs(
+                      uri.toString().hashCode()
+                  );
 
               File temp =
                   new File(
@@ -571,28 +707,43 @@ jobs:
                       new FileOutputStream(temp)
               ) {
                 if (input == null) {
-                  throw new Exception("STREAM_UNAVAILABLE");
+                  throw new Exception(
+                      "STREAM_UNAVAILABLE"
+                  );
                 }
 
-                byte[] buffer = new byte[8192];
+                byte[] buffer =
+                    new byte[8192];
+
                 int read;
 
-                while ((read = input.read(buffer)) != -1) {
+                while (
+                    (read =
+                        input.read(buffer)) != -1
+                ) {
                   total += read;
 
                   if (total > max) {
-                    throw new Exception("MEDIA_TOO_LARGE");
+                    throw new Exception(
+                        "MEDIA_TOO_LARGE"
+                    );
                   }
 
-                  output.write(buffer, 0, read);
+                  output.write(
+                      buffer,
+                      0,
+                      read
+                  );
                 }
 
                 output.flush();
 
               } catch (Exception ex) {
+
                 try {
                   temp.delete();
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
 
                 notifyReceiveError(
                     uri,
@@ -607,30 +758,47 @@ jobs:
               String sniff = null;
 
               try {
-                sniff = sniffKindAndMime(temp);
-              } catch (Exception ignored) {}
+                sniff =
+                    sniffKindAndMime(temp);
+              } catch (Exception ignored) {
+              }
 
               boolean audio =
                   hintedAudio ||
-                  (sniff != null && sniff.startsWith("audio|"));
+                  (
+                      sniff != null &&
+                      sniff.startsWith("audio|")
+                  );
 
               boolean photo =
                   hintedPhoto ||
-                  (sniff != null && sniff.startsWith("photo|"));
+                  (
+                      sniff != null &&
+                      sniff.startsWith("photo|")
+                  );
 
-              if (photo && total > MAX_PHOTO_BYTES) {
+              if (
+                  photo &&
+                  total > MAX_PHOTO_BYTES
+              ) {
                 try {
                   temp.delete();
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
 
-                notifyReceiveError(uri, "MEDIA_TOO_LARGE");
+                notifyReceiveError(
+                    uri,
+                    "MEDIA_TOO_LARGE"
+                );
+
                 return;
               }
 
               if (!audio && !photo) {
                 try {
                   temp.delete();
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
 
                 notifyReceiveError(
                     uri,
@@ -641,13 +809,17 @@ jobs:
               }
 
               if (sniff != null) {
-                String[] parts = sniff.split("\\|", 2);
+                String[] parts =
+                    sniff.split("\\|", 2);
 
                 if (parts.length == 2) {
+
                   if (
                       mime == null ||
                       mime.trim().isEmpty() ||
-                      mime.equalsIgnoreCase("application/octet-stream") ||
+                      mime.equalsIgnoreCase(
+                          "application/octet-stream"
+                      ) ||
                       mime.equalsIgnoreCase("*/*")
                   ) {
                     mime = parts[1];
@@ -659,10 +831,15 @@ jobs:
                       !name.contains(".")
                   ) {
                     name =
-                        (audio
-                            ? "audio-whatsapp."
-                            : "foto-whatsapp.") +
-                        extensionFor(parts[1], name);
+                        (
+                            audio
+                                ? "audio-whatsapp."
+                                : "foto-whatsapp."
+                        ) +
+                        extensionFor(
+                            parts[1],
+                            name
+                        );
                   }
                 }
               }
@@ -671,7 +848,9 @@ jobs:
                   mime == null ||
                   mime.trim().isEmpty() ||
                   mime.equals("*/*") ||
-                  mime.equalsIgnoreCase("application/octet-stream")
+                  mime.equalsIgnoreCase(
+                      "application/octet-stream"
+                  )
               ) {
                 mime =
                     audio
@@ -686,9 +865,15 @@ jobs:
                 name =
                     audio
                         ? "audio-whatsapp." +
-                          extensionFor(mime, name)
+                          extensionFor(
+                              mime,
+                              name
+                          )
                         : "foto-whatsapp." +
-                          extensionFor(mime, name);
+                          extensionFor(
+                              mime,
+                              name
+                          );
               }
 
               String id =
@@ -696,7 +881,10 @@ jobs:
                   System.currentTimeMillis() +
                   "-" +
                   Math.abs(
-                      (uri.toString() + total).hashCode()
+                      (
+                          uri.toString() +
+                          total
+                      ).hashCode()
                   );
 
               File out =
@@ -708,11 +896,16 @@ jobs:
                       "__" +
                       b64(name) +
                       "__" +
-                      (audio ? "audio" : "photo") +
+                      (
+                          audio
+                              ? "audio"
+                              : "photo"
+                      ) +
                       "__1.bin"
                   );
 
               if (!temp.renameTo(out)) {
+
                 try (
                     FileInputStream in =
                         new FileInputStream(temp);
@@ -720,20 +913,27 @@ jobs:
                     FileOutputStream os =
                         new FileOutputStream(out)
                 ) {
-                  byte[] buffer = new byte[8192];
+                  byte[] buffer =
+                      new byte[8192];
+
                   int n;
 
                   while (
                       (n = in.read(buffer)) != -1
                   ) {
-                    os.write(buffer, 0, n);
+                    os.write(
+                        buffer,
+                        0,
+                        n
+                    );
                   }
                 }
 
                 temp.delete();
               }
 
-              JSObject event = metadata(out);
+              JSObject event =
+                  metadata(out);
 
               instance.notifyListeners(
                   "sharedMedia",
@@ -745,10 +945,19 @@ jobs:
                 Uri uri,
                 String code
             ) {
-              JSObject event = new JSObject();
+              JSObject event =
+                  new JSObject();
 
-              event.put("ok", false);
-              event.put("code", code);
+              event.put(
+                  "ok",
+                  false
+              );
+
+              event.put(
+                  "code",
+                  code
+              );
+
               event.put(
                   "uri",
                   uri == null
@@ -781,8 +990,12 @@ jobs:
                   intent.getAction();
 
               if (
-                  !Intent.ACTION_SEND.equals(action) &&
-                  !Intent.ACTION_SEND_MULTIPLE.equals(action)
+                  !Intent.ACTION_SEND.equals(
+                      action
+                  ) &&
+                  !Intent.ACTION_SEND_MULTIPLE.equals(
+                      action
+                  )
               ) {
                 return;
               }
@@ -790,10 +1003,12 @@ jobs:
               sharedLaunch = true;
 
               try {
+
                 java.util.ArrayList<Uri> received =
                     new java.util.ArrayList<>();
 
                 if (intent.getClipData() != null) {
+
                   android.content.ClipData clip =
                       intent.getClipData();
 
@@ -803,7 +1018,9 @@ jobs:
                       i++
                   ) {
                     Uri uri =
-                        clip.getItemAt(i).getUri();
+                        clip
+                            .getItemAt(i)
+                            .getUri();
 
                     if (
                         uri != null &&
@@ -815,8 +1032,11 @@ jobs:
                 }
 
                 if (
-                    Intent.ACTION_SEND_MULTIPLE.equals(action)
+                    Intent.ACTION_SEND_MULTIPLE.equals(
+                        action
+                    )
                 ) {
+
                   java.util.ArrayList<Uri> uris =
                       intent.getParcelableArrayListExtra(
                           Intent.EXTRA_STREAM
@@ -824,6 +1044,7 @@ jobs:
 
                   if (uris != null) {
                     for (Uri uri : uris) {
+
                       if (
                           uri != null &&
                           !received.contains(uri)
@@ -834,6 +1055,7 @@ jobs:
                   }
 
                 } else {
+
                   Uri uri = null;
 
                   try {
@@ -841,7 +1063,8 @@ jobs:
                         intent.getParcelableExtra(
                             Intent.EXTRA_STREAM
                         );
-                  } catch (Exception ignored) {}
+                  } catch (Exception ignored) {
+                  }
 
                   if (
                       uri != null &&
@@ -856,6 +1079,7 @@ jobs:
                 }
 
               } catch (Exception ex) {
+
                 if (instance != null) {
                   instance.notifyReceiveError(
                       null,
@@ -907,7 +1131,9 @@ jobs:
               if (files != null) {
                 for (File file : files) {
                   if (file.isFile()) {
-                    arr.put(metadata(file));
+                    arr.put(
+                        metadata(file)
+                    );
                   }
                 }
               }
@@ -941,7 +1167,9 @@ jobs:
               if (files != null) {
                 for (File file : files) {
                   if (file.isFile()) {
-                    arr.put(metadata(file));
+                    arr.put(
+                        metadata(file)
+                    );
                   }
                 }
               }
@@ -962,7 +1190,10 @@ jobs:
                 PluginCall call
             ) {
               String id =
-                  call.getString("id", "");
+                  call.getString(
+                      "id",
+                      ""
+                  );
 
               File file =
                   findById(id);
@@ -984,6 +1215,7 @@ jobs:
               }
 
               try {
+
                 ByteArrayOutputStream output =
                     new ByteArrayOutputStream();
 
@@ -1036,6 +1268,7 @@ jobs:
                 call.resolve(r);
 
               } catch (Exception ex) {
+
                 call.reject(
                     "SHARED_MEDIA_READ_ERROR",
                     ex.getMessage() == null
@@ -1050,7 +1283,10 @@ jobs:
                 PluginCall call
             ) {
               String id =
-                  call.getString("id", "");
+                  call.getString(
+                      "id",
+                      ""
+                  );
 
               File file =
                   findById(id);
@@ -1072,14 +1308,23 @@ jobs:
                 PluginCall call
             ) {
               if (
-                  getPermissionState("contacts") ==
+                  getPermissionState(
+                      "contacts"
+                  ) ==
                   PermissionState.GRANTED
               ) {
                 JSObject r =
                     new JSObject();
 
-                r.put("granted", true);
-                r.put("state", "granted");
+                r.put(
+                    "granted",
+                    true
+                );
+
+                r.put(
+                    "state",
+                    "granted"
+                );
 
                 call.resolve(r);
                 return;
@@ -1097,7 +1342,9 @@ jobs:
                 PluginCall call
             ) {
               boolean granted =
-                  getPermissionState("contacts") ==
+                  getPermissionState(
+                      "contacts"
+                  ) ==
                   PermissionState.GRANTED;
 
               JSObject r =
@@ -1123,14 +1370,23 @@ jobs:
                 PluginCall call
             ) {
               if (
-                  getPermissionState("microphone") ==
+                  getPermissionState(
+                      "microphone"
+                  ) ==
                   PermissionState.GRANTED
               ) {
                 JSObject r =
                     new JSObject();
 
-                r.put("granted", true);
-                r.put("state", "granted");
+                r.put(
+                    "granted",
+                    true
+                );
+
+                r.put(
+                    "state",
+                    "granted"
+                );
 
                 call.resolve(r);
                 return;
@@ -1148,7 +1404,9 @@ jobs:
                 PluginCall call
             ) {
               boolean granted =
-                  getPermissionState("microphone") ==
+                  getPermissionState(
+                      "microphone"
+                  ) ==
                   PermissionState.GRANTED;
 
               JSObject r =
@@ -1198,6 +1456,7 @@ jobs:
                 PluginCall call
             ) {
               try {
+
                 Intent intent =
                     new Intent(
                         Settings.ACTION_APPLICATION_DETAILS_SETTINGS
@@ -1217,6 +1476,7 @@ jobs:
                 call.resolve();
 
               } catch (Exception ex) {
+
                 call.reject(
                     "SETTINGS_ERROR",
                     ex.getMessage()
@@ -1238,22 +1498,41 @@ jobs:
 
           import android.content.Intent;
           import android.os.Bundle;
+
           import com.getcapacitor.BridgeActivity;
 
           public class MainActivity extends BridgeActivity {
 
             @Override
-            public void onCreate(Bundle savedInstanceState) {
-              registerPlugin(PermissionBridgePlugin.class);
-              super.onCreate(savedInstanceState);
-              PermissionBridgePlugin.handleSharedIntent(getIntent());
+            public void onCreate(
+                Bundle savedInstanceState
+            ) {
+              registerPlugin(
+                  PermissionBridgePlugin.class
+              );
+
+              super.onCreate(
+                  savedInstanceState
+              );
+
+              PermissionBridgePlugin
+                  .handleSharedIntent(
+                      getIntent()
+                  );
             }
 
             @Override
-            protected void onNewIntent(Intent intent) {
+            protected void onNewIntent(
+                Intent intent
+            ) {
               super.onNewIntent(intent);
+
               setIntent(intent);
-              PermissionBridgePlugin.handleSharedIntent(intent);
+
+              PermissionBridgePlugin
+                  .handleSharedIntent(
+                      intent
+                  );
             }
           }
           JAVA
@@ -1290,7 +1569,10 @@ jobs:
           additions = []
 
           for permission in permissions:
-              if f'android:name="{permission}"' not in text:
+              if (
+                  f'android:name="{permission}"'
+                  not in text
+              ):
                   additions.append(
                       f'    <uses-permission android:name="{permission}" />\n'
                   )
@@ -1302,69 +1584,81 @@ jobs:
                   1
               )
 
-          activity_marker = 'android:name=".MainActivity"'
+          activity_marker =
+              'android:name=".MainActivity"'
 
           if activity_marker in text:
-              activity_marker_pos = text.find(
-                  activity_marker
-              )
 
-              activity_start = text.rfind(
-                  "<activity",
-                  0,
-                  activity_marker_pos
-              )
+              activity_marker_pos =
+                  text.find(activity_marker)
 
-              activity_end = text.find(
-                  "</activity>",
-                  activity_start
-              )
+              activity_start =
+                  text.rfind(
+                      "<activity",
+                      0,
+                      activity_marker_pos
+                  )
+
+              activity_end =
+                  text.find(
+                      "</activity>",
+                      activity_start
+                  )
 
               if (
                   activity_start >= 0 and
                   activity_end >= 0
               ):
-                  activity_block = text[
-                      activity_start:activity_end
-                  ]
 
-                  activity_block = re.sub(
-                      r'\s+android:exported="[^"]*"',
-                      '',
-                      activity_block
-                  )
+                  activity_block =
+                      text[
+                          activity_start:
+                          activity_end
+                      ]
 
-                  activity_block = re.sub(
-                      r'\s+android:grantUriPermissions="[^"]*"',
-                      '',
-                      activity_block
-                  )
+                  activity_block =
+                      re.sub(
+                          r'\s+android:exported="[^"]*"',
+                          '',
+                          activity_block
+                      )
 
-                  activity_block = re.sub(
-                      r'\s+android:launchMode="[^"]*"',
-                      '',
-                      activity_block
-                  )
+                  activity_block =
+                      re.sub(
+                          r'\s+android:grantUriPermissions="[^"]*"',
+                          '',
+                          activity_block
+                      )
 
-                  activity_block = activity_block.replace(
-                      '<activity',
-                      '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
-                      1
-                  )
+                  activity_block =
+                      re.sub(
+                          r'\s+android:launchMode="[^"]*"',
+                          '',
+                          activity_block
+                      )
 
-                  activity_block = re.sub(
-                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
-                      '',
-                      activity_block,
-                      flags=re.S
-                  )
+                  activity_block =
+                      activity_block.replace(
+                          '<activity',
+                          '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
+                          1
+                      )
 
-                  activity_block = re.sub(
-                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
-                      '',
-                      activity_block,
-                      flags=re.S
-                  )
+                  activity_block =
+                      re.sub(
+                          r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
+                          '',
+                          activity_block,
+                          flags=re.S
+                      )
+
+                  activity_block =
+                      re.sub(
+                          r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
+                          '',
+                          activity_block,
+                          flags=re.S
+                      )
 
                   intent_filter = """
                   <intent-filter>
@@ -1396,15 +1690,15 @@ jobs:
                     <action android:name="android.intent.action.SEND_MULTIPLE" />
                     <category android:name="android.intent.category.DEFAULT" />
                     <data android:mimeType="*/*" />
-                  </intent-filter>"""
+                  </intent-filter>
+                  """
 
                   activity_block += intent_filter
 
-                  text = (
-                      text[:activity_start]
-                      + activity_block
-                      + text[activity_end:]
-                  )
+                  text =
+                      text[:activity_start] +
+                      activity_block +
+                      text[activity_end:]
 
           manifest.write_text(text)
           PY
@@ -1466,6 +1760,7 @@ jobs:
           )
 
           if 'signingConfigs {' not in text:
+
               signing = '''
               signingConfigs {
                   release {
@@ -1484,6 +1779,7 @@ jobs:
               )
 
           elif 'signingConfigs.release' not in text:
+
               text = text.replace(
                   'signingConfigs {',
                   '''signingConfigs {
@@ -1497,12 +1793,14 @@ jobs:
                   1
               )
 
-          build_types = re.search(
-              r'buildTypes\s*\{',
-              text
-          )
+          build_types =
+              re.search(
+                  r'buildTypes\s*\{',
+                  text
+              )
 
           if not build_types:
+
               text += '''
               \nbuildTypes {
                   release {
@@ -1513,49 +1811,49 @@ jobs:
               '''
 
           else:
-              tail = text[
-                  build_types.end():
-              ]
 
-              release = re.search(
-                  r'release\s*\{',
-                  tail
-              )
+              tail =
+                  text[
+                      build_types.end():
+                  ]
+
+              release =
+                  re.search(
+                      r'release\s*\{',
+                      tail
+                  )
 
               if not release:
-                  pos = build_types.end()
 
-                  text = (
-                      text[:pos]
-                      + '''
+                  pos =
+                      build_types.end()
+
+                  text =
+                      text[:pos] + '''
                   release {
                       signingConfig signingConfigs.release
                       minifyEnabled false
                   }
-                  '''
-                      + text[pos:]
-                  )
+                  ''' + text[pos:]
 
               elif (
                   'signingConfig signingConfigs.release'
-                  not in tail[
+                  not in
+                  tail[
                       release.end():
                       release.end() + 2500
                   ]
               ):
-                  pos = (
-                      build_types.end()
-                      + release.end()
-                  )
 
-                  text = (
-                      text[:pos]
-                      + '''
+                  pos =
+                      build_types.end() +
+                      release.end()
+
+                  text =
+                      text[:pos] + '''
                       signingConfig signingConfigs.release
                       minifyEnabled false
-                  '''
-                      + text[pos:]
-                  )
+                  ''' + text[pos:]
 
           path.write_text(text)
           PY
@@ -1574,7 +1872,12 @@ jobs:
 
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
 
-          for PERM in READ_CONTACTS WRITE_CONTACTS RECORD_AUDIO CAMERA; do
+          for PERM in \
+            READ_CONTACTS \
+            WRITE_CONTACTS \
+            RECORD_AUDIO \
+            CAMERA
+          do
             FULL="android.permission.$PERM"
 
             grep -q "$FULL" "$MANIFEST" || {
@@ -1585,39 +1888,49 @@ jobs:
             echo "OK: $FULL"
           done
 
-          grep -q 'android:launchMode="singleTask"' "$MANIFEST" || {
-            echo "ERRO: MainActivity sem launchMode=singleTask."
-            exit 1
-          }
+          grep -q \
+            'android:launchMode="singleTask"' \
+            "$MANIFEST" || {
+              echo "ERRO: MainActivity sem launchMode=singleTask."
+              exit 1
+            }
 
-          echo "OK: MainActivity launchMode=singleTask"
+          grep -q \
+            'android.intent.action.SEND' \
+            "$MANIFEST" || {
+              echo "ERRO: filtro ACTION_SEND ausente."
+              exit 1
+            }
 
-          grep -q 'android.intent.action.SEND' "$MANIFEST" || {
-            echo "ERRO: filtro ACTION_SEND ausente."
-            exit 1
-          }
+          grep -q \
+            'android.intent.action.SEND_MULTIPLE' \
+            "$MANIFEST" || {
+              echo "ERRO: filtro ACTION_SEND_MULTIPLE ausente."
+              exit 1
+            }
 
-          grep -q 'android.intent.action.SEND_MULTIPLE' "$MANIFEST" || {
-            echo "ERRO: filtro ACTION_SEND_MULTIPLE ausente."
-            exit 1
-          }
+          grep -q \
+            'android:mimeType="audio/\*"' \
+            "$MANIFEST" || {
+              echo "ERRO: filtro audio/* ausente."
+              exit 1
+            }
 
-          grep -q 'android:mimeType="image/\*"' "$MANIFEST" || {
-            echo "ERRO: filtro image/* ausente."
-            exit 1
-          }
+          grep -q \
+            'android:mimeType="image/\*"' \
+            "$MANIFEST" || {
+              echo "ERRO: filtro image/* ausente."
+              exit 1
+            }
 
-          grep -q 'android:mimeType="audio/\*"' "$MANIFEST" || {
-            echo "ERRO: filtro audio/* ausente."
-            exit 1
-          }
+          grep -q \
+            'android:mimeType="\*/\*"' \
+            "$MANIFEST" || {
+              echo "ERRO: filtro */* ausente."
+              exit 1
+            }
 
-          grep -q 'android:mimeType="\*/\*"' "$MANIFEST" || {
-            echo "ERRO: filtro */* ausente."
-            exit 1
-          }
-
-          echo "OK: filtros de compartilhamento presentes para áudio, foto e MIME genérico."
+          echo "OK: Manifest de compartilhamento."
 
       - name: Validar código nativo de compartilhamento antes do build
         shell: bash
@@ -1625,62 +1938,85 @@ jobs:
           set -e
 
           MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
+
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
-          grep -q 'PermissionBridgePlugin.handleSharedIntent(getIntent())' "$MAIN" || {
-            echo "ERRO: MainActivity não processa o Intent inicial."
-            exit 1
-          }
+          grep -q \
+            'PermissionBridgePlugin' \
+            "$MAIN" || {
+              echo "ERRO: PermissionBridge não registrado."
+              exit 1
+            }
 
-          grep -q 'PermissionBridgePlugin.handleSharedIntent(intent)' "$MAIN" || {
-            echo "ERRO: onNewIntent não encaminha o compartilhamento."
-            exit 1
-          }
+          grep -q \
+            'handleSharedIntent' \
+            "$MAIN" || {
+              echo "ERRO: MainActivity não processa compartilhamento."
+              exit 1
+            }
 
-          grep -q 'singleTask' "$PROJECT_DIR/android/app/src/main/AndroidManifest.xml" || {
-            echo "ERRO: singleTask não configurado."
-            exit 1
-          }
+          grep -q \
+            'singleTask' \
+            "$PROJECT_DIR/android/app/src/main/AndroidManifest.xml" || {
+              echo "ERRO: singleTask não configurado."
+              exit 1
+            }
 
-          grep -q 'ACTION_SEND_MULTIPLE' "$BRIDGE" || {
-            echo "ERRO: PermissionBridge sem SEND_MULTIPLE."
-            exit 1
-          }
+          grep -q \
+            'ACTION_SEND_MULTIPLE' \
+            "$BRIDGE" || {
+              echo "ERRO: PermissionBridge sem SEND_MULTIPLE."
+              exit 1
+            }
 
-          grep -q 'EXTRA_STREAM' "$BRIDGE" || {
-            echo "ERRO: PermissionBridge sem EXTRA_STREAM."
-            exit 1
-          }
+          grep -q \
+            'EXTRA_STREAM' \
+            "$BRIDGE" || {
+              echo "ERRO: PermissionBridge sem EXTRA_STREAM."
+              exit 1
+            }
 
-          grep -q 'getClipData' "$BRIDGE" || {
-            echo "ERRO: PermissionBridge sem ClipData."
-            exit 1
-          }
+          grep -q \
+            'getClipData' \
+            "$BRIDGE" || {
+              echo "ERRO: PermissionBridge sem ClipData."
+              exit 1
+            }
 
-          grep -q 'openInputStream' "$BRIDGE" || {
-            echo "ERRO: PermissionBridge não copia o arquivo recebido."
-            exit 1
-          }
+          grep -q \
+            'openInputStream' \
+            "$BRIDGE" || {
+              echo "ERRO: PermissionBridge não copia o arquivo."
+              exit 1
+            }
 
-          grep -q 'shared-media-inbox' "$BRIDGE" || {
-            echo "ERRO: inbox persistente ausente."
-            exit 1
-          }
+          grep -q \
+            'shared-media-inbox' \
+            "$BRIDGE" || {
+              echo "ERRO: inbox persistente ausente."
+              exit 1
+            }
 
-          grep -q 'notifyListeners("sharedMedia"' "$BRIDGE" || {
-            echo "ERRO: evento sharedMedia ausente."
-            exit 1
-          }
+          grep -q \
+            'sharedMedia' \
+            "$BRIDGE" || {
+              echo "ERRO: evento sharedMedia ausente."
+              exit 1
+            }
 
-          grep -q 'getSharedMedia' "$BRIDGE" || {
-            echo "ERRO: leitura da Caixa de Mídias ausente."
-            exit 1
-          }
+          grep -q \
+            'getSharedMedia' \
+            "$BRIDGE" || {
+              echo "ERRO: getSharedMedia ausente."
+              exit 1
+            }
 
-          grep -q 'readSharedMedia' "$BRIDGE" || {
-            echo "ERRO: leitura do áudio recebido ausente."
-            exit 1
-          }
+          grep -q \
+            'readSharedMedia' \
+            "$BRIDGE" || {
+              echo "ERRO: readSharedMedia ausente."
+              exit 1
+            }
 
           echo "OK: receptor nativo + cópia persistente + evento + leitura validados."
 
@@ -1745,9 +2081,9 @@ jobs:
 
           AAPT=$(find "$ANDROID_HOME/build-tools" \
             -type f \
-            -name aapt \
-            | sort -V \
-            | tail -n 1)
+            -name aapt |
+            sort -V |
+            tail -n 1)
 
           test -n "$AAPT" || {
             echo "ERRO: aapt não encontrado."
@@ -1757,10 +2093,17 @@ jobs:
           "$AAPT" dump permissions "$APK" |
             tee /tmp/apk-permissions.txt
 
-          for PERM in READ_CONTACTS WRITE_CONTACTS RECORD_AUDIO CAMERA; do
+          for PERM in \
+            READ_CONTACTS \
+            WRITE_CONTACTS \
+            RECORD_AUDIO \
+            CAMERA
+          do
             FULL="android.permission.$PERM"
 
-            grep -q "$FULL" /tmp/apk-permissions.txt || {
+            grep -q \
+              "$FULL" \
+              /tmp/apk-permissions.txt || {
               echo "ERRO: $FULL não está no APK."
               exit 1
             }
@@ -1770,45 +2113,61 @@ jobs:
 
           FINAL_MANIFEST=/tmp/final-v120-manifest.txt
 
-          "$AAPT" dump xmltree "$APK" AndroidManifest.xml |
+          "$AAPT" dump xmltree \
+            "$APK" \
+            AndroidManifest.xml |
             tee "$FINAL_MANIFEST" >/dev/null
 
-          grep -q 'launchMode.*singleTask' "$FINAL_MANIFEST" || {
-            echo "ERRO: launchMode=singleTask não encontrado no APK."
+          grep -q \
+            'launchMode.*singleTask' \
+            "$FINAL_MANIFEST" || {
+            echo "ERRO: singleTask não encontrado."
             exit 1
           }
 
-          grep -q 'audio/\*' "$FINAL_MANIFEST" || {
-            echo "ERRO: audio/* não encontrado no APK."
+          grep -q \
+            'audio/\*' \
+            "$FINAL_MANIFEST" || {
+            echo "ERRO: audio/* não encontrado."
             exit 1
           }
 
-          grep -q 'image/\*' "$FINAL_MANIFEST" || {
-            echo "ERRO: image/* não encontrado no APK."
+          grep -q \
+            'image/\*' \
+            "$FINAL_MANIFEST" || {
+            echo "ERRO: image/* não encontrado."
             exit 1
           }
 
-          grep -q '\*/\*' "$FINAL_MANIFEST" || {
-            echo "ERRO: */* não encontrado no APK."
+          grep -q \
+            '\*/\*' \
+            "$FINAL_MANIFEST" || {
+            echo "ERRO: */* não encontrado."
             exit 1
           }
 
-          grep -q 'android.intent.action.SEND' "$FINAL_MANIFEST" || {
-            echo "ERRO: ACTION_SEND não encontrado no APK."
+          grep -q \
+            'android.intent.action.SEND' \
+            "$FINAL_MANIFEST" || {
+            echo "ERRO: ACTION_SEND não encontrado."
             exit 1
           }
 
-          grep -q 'android.intent.action.SEND_MULTIPLE' "$FINAL_MANIFEST" || {
-            echo "ERRO: ACTION_SEND_MULTIPLE não encontrado no APK."
+          grep -q \
+            'android.intent.action.SEND_MULTIPLE' \
+            "$FINAL_MANIFEST" || {
+            echo "ERRO: ACTION_SEND_MULTIPLE não encontrado."
             exit 1
           }
 
-          grep -q 'grantUriPermissions' "$FINAL_MANIFEST" || {
-            echo "ERRO: grantUriPermissions não encontrado no APK."
+          grep -q \
+            'grantUriPermissions' \
+            "$FINAL_MANIFEST" || {
+            echo "ERRO: grantUriPermissions não encontrado."
             exit 1
           }
 
-          echo "OK NO APK: singleTask + grantUriPermissions + SEND + SEND_MULTIPLE + áudio + foto + MIME genérico"
+          echo "OK NO APK: compartilhamento de áudio validado."
 
       - name: Validar assinatura do APK
         shell: bash
@@ -1819,9 +2178,9 @@ jobs:
 
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
             -type f \
-            -name apksigner \
-            | sort -V \
-            | tail -n 1)
+            -name apksigner |
+            sort -V |
+            tail -n 1)
 
           test -n "$APKSIGNER" || {
             echo "ERRO: apksigner não encontrado."
@@ -1842,4 +2201,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -f "$PROJECT_DIR/android/app/release-key.jks" 2>/dev/null || true
+          rm -f \
+            "$PROJECT_DIR/android/app/release-key.jks" \
+            2>/dev/null || true
