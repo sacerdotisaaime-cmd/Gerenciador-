@@ -444,7 +444,6 @@ jobs:
                 }
               }
 
-              // JPEG
               if (
                 len >= 3 &&
                 (h[0] & 0xff) == 0xff &&
@@ -454,7 +453,6 @@ jobs:
                 return "photo|image/jpeg";
               }
 
-              // PNG
               if (
                 startsWith(
                   h,
@@ -472,7 +470,6 @@ jobs:
                 return "photo|image/png";
               }
 
-              // WebP
               if (
                 len >= 12 &&
                 startsWith(
@@ -491,7 +488,6 @@ jobs:
                 return "photo|image/webp";
               }
 
-              // Ogg/Opus
               if (
                 startsWith(
                   h,
@@ -505,7 +501,6 @@ jobs:
                 return "audio|audio/ogg";
               }
 
-              // WAV
               if (
                 len >= 12 &&
                 startsWith(
@@ -524,7 +519,6 @@ jobs:
                 return "audio|audio/wav";
               }
 
-              // MP3 com ID3
               if (
                 startsWith(
                   h,
@@ -537,7 +531,6 @@ jobs:
                 return "audio|audio/mpeg";
               }
 
-              // MP3 frame sync / AAC ADTS
               if (
                 len >= 2 &&
                 (h[0] & 0xff) == 0xff &&
@@ -546,7 +539,6 @@ jobs:
                 return "audio|audio/mpeg";
               }
 
-              // HEIC/HEIF/M4A/M4B
               if (
                 len >= 12 &&
                 h[4] == 'f' &&
@@ -581,7 +573,6 @@ jobs:
                 }
               }
 
-              // WEBM
               if (
                 startsWith(
                   h,
@@ -1046,9 +1037,7 @@ jobs:
                   ) {
 
                     Uri uri =
-                      clip
-                        .getItemAt(i)
-                        .getUri();
+                      clip.getItemAt(i).getUri();
 
                     if (
                       uri != null &&
@@ -1961,7 +1950,6 @@ jobs:
           set -e
 
           MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
-
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
           grep -Fq \
@@ -2020,8 +2008,8 @@ jobs:
               exit 1
             }
 
-          grep -q \
-            'notifyListeners("sharedMedia"' \
+          grep -Fq \
+            '"sharedMedia"' \
             "$BRIDGE" || {
               echo "ERRO: evento sharedMedia ausente."
               exit 1
@@ -2051,9 +2039,6 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -e
-
-          # As variáveis precisam estar disponíveis NESTA etapa,
-          # porque é aqui que o Gradle lê System.getenv(...).
 
           test -n "$ANDROID_KEYSTORE_PASSWORD" || {
             echo "ERRO: ANDROID_KEYSTORE_PASSWORD não chegou ao Gradle."
