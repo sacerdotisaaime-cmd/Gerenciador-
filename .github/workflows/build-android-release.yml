@@ -263,7 +263,7 @@ jobs:
 
 
       # ============================================================
-      # MIN SDK
+      # SDK ANDROID
       # ============================================================
 
       - name: Ajustar SDK Android
@@ -273,9 +273,11 @@ jobs:
           VARIABLES="$PROJECT_DIR/android/variables.gradle"
 
           if [ -f "$VARIABLES" ]; then
+
             sed -i \
               -E 's/minSdkVersion[[:space:]]+[0-9]+/minSdkVersion 26/g' \
               "$VARIABLES"
+
           fi
 
           echo "minSdk configurado."
@@ -313,7 +315,6 @@ jobs:
           import android.app.Activity;
           import android.content.ClipData;
           import android.content.ContentResolver;
-          import android.content.Context;
           import android.content.Intent;
           import android.content.pm.PackageManager;
           import android.net.Uri;
@@ -362,12 +363,9 @@ jobs:
                   5012;
 
 
-              // ==================================================
-              // LIFECYCLE
-              // ==================================================
-
               @Override
               public void load() {
+
                   super.load();
 
                   Activity activity =
@@ -380,10 +378,6 @@ jobs:
                   }
               }
 
-
-              // ==================================================
-              // PERMISSIONS
-              // ==================================================
 
               @PluginMethod
               public void requestContactsPermission(
@@ -504,10 +498,6 @@ jobs:
               }
 
 
-              // ==================================================
-              // SETTINGS
-              // ==================================================
-
               @PluginMethod
               public void openSettings(
                   PluginCall call
@@ -543,10 +533,6 @@ jobs:
               }
 
 
-              // ==================================================
-              // INBOX
-              // ==================================================
-
               private File getInboxDirectory() {
 
                   File dir =
@@ -581,10 +567,6 @@ jobs:
                   );
               }
 
-
-              // ==================================================
-              // BYTE SIGNATURE
-              // ==================================================
 
               private boolean byteAt(
                   byte[] data,
@@ -640,10 +622,6 @@ jobs:
               }
 
 
-              // ==================================================
-              // MIME DETECTION
-              // ==================================================
-
               private String detectMime(
                   File file
               ) {
@@ -664,8 +642,6 @@ jobs:
                       }
 
 
-                      // JPEG
-
                       if (
                           signature(
                               h,
@@ -678,8 +654,6 @@ jobs:
                           return "image/jpeg";
                       }
 
-
-                      // PNG
 
                       if (
                           signature(
@@ -699,8 +673,6 @@ jobs:
                       }
 
 
-                      // WEBP
-
                       if (
                           length >= 12 &&
                           byteAt(h, length, 0, 'R') &&
@@ -716,8 +688,6 @@ jobs:
                       }
 
 
-                      // OGG
-
                       if (
                           signature(
                               h,
@@ -731,8 +701,6 @@ jobs:
                           return "audio/ogg";
                       }
 
-
-                      // WAV
 
                       if (
                           length >= 12 &&
@@ -749,8 +717,6 @@ jobs:
                       }
 
 
-                      // WEBM
-
                       if (
                           signature(
                               h,
@@ -765,8 +731,6 @@ jobs:
                       }
 
 
-                      // MP3 ID3
-
                       if (
                           signature(
                               h,
@@ -779,8 +743,6 @@ jobs:
                           return "audio/mpeg";
                       }
 
-
-                      // MP3 FRAME
 
                       if (length >= 2) {
 
@@ -798,8 +760,6 @@ jobs:
                           }
                       }
 
-
-                      // MP4 / M4A / M4B / HEIC
 
                       if (length >= 12) {
 
@@ -854,10 +814,6 @@ jobs:
               }
 
 
-              // ==================================================
-              // EXTENSION
-              // ==================================================
-
               private String extensionFromMime(
                   String mime
               ) {
@@ -871,33 +827,23 @@ jobs:
                           Locale.US
                       );
 
-                  if (
-                      lower.equals("image/jpeg")
-                  ) {
+                  if (lower.equals("image/jpeg")) {
                       return ".jpg";
                   }
 
-                  if (
-                      lower.equals("image/png")
-                  ) {
+                  if (lower.equals("image/png")) {
                       return ".png";
                   }
 
-                  if (
-                      lower.equals("image/webp")
-                  ) {
+                  if (lower.equals("image/webp")) {
                       return ".webp";
                   }
 
-                  if (
-                      lower.equals("image/heic")
-                  ) {
+                  if (lower.equals("image/heic")) {
                       return ".heic";
                   }
 
-                  if (
-                      lower.equals("audio/ogg")
-                  ) {
+                  if (lower.equals("audio/ogg")) {
                       return ".ogg";
                   }
 
@@ -908,21 +854,15 @@ jobs:
                       return ".wav";
                   }
 
-                  if (
-                      lower.equals("audio/mpeg")
-                  ) {
+                  if (lower.equals("audio/mpeg")) {
                       return ".mp3";
                   }
 
-                  if (
-                      lower.equals("audio/mp4")
-                  ) {
+                  if (lower.equals("audio/mp4")) {
                       return ".m4a";
                   }
 
-                  if (
-                      lower.equals("audio/webm")
-                  ) {
+                  if (lower.equals("audio/webm")) {
                       return ".webm";
                   }
 
@@ -975,15 +915,6 @@ jobs:
                   return false;
               }
 
-
-              // ==================================================
-              // COPIAR ARQUIVO
-              // ==================================================
-              //
-              // CORREÇÃO DO ERRO ANTERIOR:
-              // FileInputStream/FileOutputStream agora estão
-              // protegidos por try/catch IOException.
-              //
 
               private boolean copyFile(
                   File temp,
@@ -1058,10 +989,6 @@ jobs:
               }
 
 
-              // ==================================================
-              // NOME DO ARQUIVO
-              // ==================================================
-
               private String queryDisplayName(
                   Uri uri
               ) {
@@ -1118,10 +1045,6 @@ jobs:
               }
 
 
-              // ==================================================
-              // SALVAR URI
-              // ==================================================
-
               private JSObject saveUri(
                   Uri uri,
                   String originalName,
@@ -1141,12 +1064,6 @@ jobs:
                       sanitizeFileName(
                           originalName
                       );
-
-                  if (
-                      name.trim().isEmpty()
-                  ) {
-                      name = "shared-media";
-                  }
 
 
                   String mime =
@@ -1183,16 +1100,12 @@ jobs:
                       );
 
 
-                  String baseName =
-                      System.currentTimeMillis() +
-                      "_" +
-                      name;
-
-
                   File output =
                       new File(
                           inbox,
-                          baseName
+                          System.currentTimeMillis() +
+                          "_" +
+                          name
                       );
 
 
@@ -1230,9 +1143,7 @@ jobs:
 
                               if (
                                   mime != null &&
-                                  mime.startsWith(
-                                      "image/"
-                                  )
+                                  mime.startsWith("image/")
                               ) {
                                   limit =
                                       MAX_PHOTO_BYTES;
@@ -1261,7 +1172,7 @@ jobs:
 
                                   Log.e(
                                       TAG,
-                                      "Arquivo excede o limite permitido."
+                                      "Arquivo excede o limite."
                                   );
 
                                   return null;
@@ -1298,8 +1209,6 @@ jobs:
                       }
 
 
-                      // Adicionar extensão quando não existir
-
                       if (
                           !hasKnownExtension(name)
                       ) {
@@ -1316,7 +1225,9 @@ jobs:
                               output =
                                   new File(
                                       inbox,
-                                      baseName +
+                                      System.currentTimeMillis() +
+                                      "_" +
+                                      name +
                                       extension
                                   );
                           }
@@ -1333,9 +1244,7 @@ jobs:
                       }
 
 
-                      if (
-                          temp.exists()
-                      ) {
+                      if (temp.exists()) {
                           //noinspection ResultOfMethodCallIgnored
                           temp.delete();
                       }
@@ -1384,16 +1293,12 @@ jobs:
                           e
                       );
 
-                      if (
-                          temp.exists()
-                      ) {
+                      if (temp.exists()) {
                           //noinspection ResultOfMethodCallIgnored
                           temp.delete();
                       }
 
-                      if (
-                          output.exists()
-                      ) {
+                      if (output.exists()) {
                           //noinspection ResultOfMethodCallIgnored
                           output.delete();
                       }
@@ -1403,21 +1308,10 @@ jobs:
               }
 
 
-              // ==================================================
-              // PROCESSAR INTENT
-              // ==================================================
-
               public static void handleSharedIntent(
                   Intent intent
               ) {
-
-                  /*
-                   * O processamento efetivo acontece na instância
-                   * do plugin quando o Capacitor carrega.
-                   *
-                   * Este método existe para manter a chamada
-                   * compatível com MainActivity.
-                   */
+                  // Compatibilidade com MainActivity.
               }
 
 
@@ -1429,10 +1323,8 @@ jobs:
                       return;
                   }
 
-
                   String action =
                       intent.getAction();
-
 
                   if (
                       !Intent.ACTION_SEND.equals(action) &&
@@ -1482,9 +1374,7 @@ jobs:
                   }
 
 
-                  if (
-                      uris.isEmpty()
-                  ) {
+                  if (uris.isEmpty()) {
                       return;
                   }
 
@@ -1518,16 +1408,13 @@ jobs:
                   }
 
 
-                  if (
-                      saved.isEmpty()
-                  ) {
+                  if (saved.isEmpty()) {
                       return;
                   }
 
 
                   JSArray array =
                       new JSArray();
-
 
                   for (
                       JSObject item :
@@ -1558,10 +1445,6 @@ jobs:
                   );
               }
 
-
-              // ==================================================
-              // INITIAL SYNC
-              // ==================================================
 
               @PluginMethod
               public void claimInitialSync(
@@ -1614,27 +1497,18 @@ jobs:
               }
 
 
-              // ==================================================
-              // LISTAR ARQUIVOS
-              // ==================================================
-
               private JSArray listFiles() {
 
                   JSArray array =
                       new JSArray();
 
-
                   File dir =
                       getInboxDirectory();
-
 
                   File[] files =
                       dir.listFiles();
 
-
-                  if (
-                      files == null
-                  ) {
+                  if (files == null) {
                       return array;
                   }
 
@@ -1644,12 +1518,9 @@ jobs:
                       files
                   ) {
 
-                      if (
-                          !file.isFile()
-                      ) {
+                      if (!file.isFile()) {
                           continue;
                       }
-
 
                       if (
                           file.getName()
@@ -1662,10 +1533,7 @@ jobs:
                       String mime =
                           detectMime(file);
 
-
-                      if (
-                          mime == null
-                      ) {
+                      if (mime == null) {
                           mime =
                               "application/octet-stream";
                       }
@@ -1712,10 +1580,6 @@ jobs:
                   return array;
               }
 
-
-              // ==================================================
-              // READ MEDIA
-              // ==================================================
 
               @PluginMethod
               public void readSharedMedia(
@@ -1792,10 +1656,6 @@ jobs:
               }
 
 
-              // ==================================================
-              // DELETE MEDIA
-              // ==================================================
-
               @PluginMethod
               public void deleteSharedMedia(
                   PluginCall call
@@ -1825,17 +1685,13 @@ jobs:
                       );
 
 
-                  if (
-                      !file.exists()
-                  ) {
+                  if (!file.exists()) {
                       call.resolve();
                       return;
                   }
 
 
-                  if (
-                      !file.delete()
-                  ) {
+                  if (!file.delete()) {
 
                       call.reject(
                           "Não foi possível excluir a mídia"
@@ -1848,10 +1704,6 @@ jobs:
                   call.resolve();
               }
 
-
-              // ==================================================
-              // NOVA INTENT
-              // ==================================================
 
               @Override
               protected void handleOnNewIntent(
@@ -1933,7 +1785,7 @@ jobs:
 
 
       # ============================================================
-      # ANDROID MANIFEST
+      # MANIFEST
       # ============================================================
 
       - name: Configurar AndroidManifest
@@ -1956,16 +1808,13 @@ jobs:
           )
 
 
-          # ==================================================
-          # PERMISSIONS
-          # ==================================================
-
           permissions = [
               '<uses-permission android:name="android.permission.READ_CONTACTS" />',
               '<uses-permission android:name="android.permission.WRITE_CONTACTS" />',
               '<uses-permission android:name="android.permission.RECORD_AUDIO" />',
               '<uses-permission android:name="android.permission.CAMERA" />',
           ]
+
 
           for permission in permissions:
 
@@ -1978,10 +1827,6 @@ jobs:
                       1
                   )
 
-
-          # ==================================================
-          # MAIN ACTIVITY
-          # ==================================================
 
           activity_block = r'''
               <activity
@@ -2035,10 +1880,6 @@ jobs:
           '''
 
 
-          # ==================================================
-          # REMOVER MAINACTIVITY EXISTENTE
-          # ==================================================
-
           pattern = re.compile(
               r'\s*<activity\b[^>]*android:name="\.MainActivity"[^>]*>.*?</activity>',
               re.DOTALL
@@ -2050,10 +1891,6 @@ jobs:
           )
 
 
-          # ==================================================
-          # LOCALIZAR APPLICATION
-          # ==================================================
-
           application_end = text.find(
               "</application>"
           )
@@ -2061,13 +1898,9 @@ jobs:
           if application_end == -1:
 
               raise SystemExit(
-                  "ERRO: </application> não encontrado no Manifest."
+                  "ERRO: </application> não encontrado."
               )
 
-
-          # ==================================================
-          # INSERIR MAINACTIVITY
-          # ==================================================
 
           text = (
               text[:application_end]
@@ -2077,23 +1910,16 @@ jobs:
           )
 
 
-          # ==================================================
-          # SALVAR
-          # ==================================================
-
           manifest.write_text(
               text,
               encoding="utf-8"
           )
 
           print(
-              "AndroidManifest.xml configurado com sucesso."
+              "AndroidManifest.xml configurado."
           )
           PY
 
-          echo "=================================================="
-          echo "VALIDANDO MANIFEST"
-          echo "=================================================="
 
           grep -q "RECORD_AUDIO" "$MANIFEST"
           grep -q "singleTask" "$MANIFEST"
@@ -2126,10 +1952,10 @@ jobs:
 
 
       # ============================================================
-      # VERSÃO
+      # BUILD.GRADLE - CORREÇÃO COMPLETA
       # ============================================================
 
-      - name: Configurar versão V120 e assinatura
+      - name: Configurar build.gradle V120
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -2138,6 +1964,14 @@ jobs:
           set -e
 
           BUILD_GRADLE="$PROJECT_DIR/android/app/build.gradle"
+
+          test -f "$BUILD_GRADLE"
+
+          echo "=================================================="
+          echo "BUILD.GRADLE ANTES DA CORREÇÃO"
+          echo "=================================================="
+
+          cat "$BUILD_GRADLE"
 
           python3 - "$BUILD_GRADLE" <<'PY'
           from pathlib import Path
@@ -2152,16 +1986,16 @@ jobs:
 
 
           # ==================================================
-          # VERSION CODE
+          # VERSÃO
           # ==================================================
 
           if re.search(
-              r'versionCode\s+\d+',
+              r'\bversionCode\s+\d+',
               text
           ):
 
               text = re.sub(
-                  r'versionCode\s+\d+',
+                  r'\bversionCode\s+\d+',
                   'versionCode 120',
                   text,
                   count=1
@@ -2170,21 +2004,17 @@ jobs:
           else:
 
               raise SystemExit(
-                  "versionCode não encontrado."
+                  "ERRO: versionCode não encontrado."
               )
 
 
-          # ==================================================
-          # VERSION NAME
-          # ==================================================
-
           if re.search(
-              r'versionName\s+"[^"]+"',
+              r'\bversionName\s+"[^"]+"',
               text
           ):
 
               text = re.sub(
-                  r'versionName\s+"[^"]+"',
+                  r'\bversionName\s+"[^"]+"',
                   'versionName "1.20.0"',
                   text,
                   count=1
@@ -2193,17 +2023,163 @@ jobs:
           else:
 
               raise SystemExit(
-                  "versionName não encontrado."
+                  "ERRO: versionName não encontrado."
               )
 
 
           # ==================================================
-          # SIGNING CONFIG
+          # COMPILE SDK
           # ==================================================
 
-          if "signingConfigs {" not in text:
+          if re.search(
+              r'\bcompileSdk(?:Version)?\s+[^ \n]+',
+              text
+          ):
 
-              signing = '''
+              text = re.sub(
+                  r'\bcompileSdkVersion\s+\S+',
+                  'compileSdkVersion 35',
+                  text,
+                  count=1
+              )
+
+              text = re.sub(
+                  r'\bcompileSdk\s+\S+',
+                  'compileSdk 35',
+                  text,
+                  count=1
+              )
+
+          else:
+
+              android_match = re.search(
+                  r'android\s*\{',
+                  text
+              )
+
+              if not android_match:
+
+                  raise SystemExit(
+                      "ERRO: bloco android não encontrado."
+                  )
+
+              insert_pos = (
+                  android_match.end()
+              )
+
+              text = (
+                  text[:insert_pos]
+                  + "\n\n    compileSdk 35\n"
+                  + text[insert_pos:]
+              )
+
+
+          # ==================================================
+          # MIN SDK
+          # ==================================================
+
+          if re.search(
+              r'\bminSdk(?:Version)?\s+\S+',
+              text
+          ):
+
+              text = re.sub(
+                  r'\bminSdkVersion\s+\S+',
+                  'minSdkVersion 26',
+                  text,
+                  count=1
+              )
+
+              text = re.sub(
+                  r'\bminSdk\s+\S+',
+                  'minSdk 26',
+                  text,
+                  count=1
+              )
+
+          else:
+
+              default_config = re.search(
+                  r'defaultConfig\s*\{',
+                  text
+              )
+
+              if default_config:
+
+                  insert_pos = (
+                      default_config.end()
+                  )
+
+                  text = (
+                      text[:insert_pos]
+                      + "\n\n        minSdk 26\n"
+                      + text[insert_pos:]
+                  )
+
+
+          # ==================================================
+          # TARGET SDK
+          # ==================================================
+
+          if re.search(
+              r'\btargetSdk(?:Version)?\s+\S+',
+              text
+          ):
+
+              text = re.sub(
+                  r'\btargetSdkVersion\s+\S+',
+                  'targetSdkVersion 35',
+                  text,
+                  count=1
+              )
+
+              text = re.sub(
+                  r'\btargetSdk\s+\S+',
+                  'targetSdk 35',
+                  text,
+                  count=1
+              )
+
+          else:
+
+              default_config = re.search(
+                  r'defaultConfig\s*\{',
+                  text
+              )
+
+              if default_config:
+
+                  insert_pos = (
+                      default_config.end()
+                  )
+
+                  text = (
+                      text[:insert_pos]
+                      + "\n\n        targetSdk 35\n"
+                      + text[insert_pos:]
+                  )
+
+
+          # ==================================================
+          # REMOVER BLOCOS DE ASSINATURA QUE POSSAM TER SIDO
+          # GERADOS DE FORMA INCORRETA
+          # ==================================================
+
+          text = re.sub(
+              r'\n\s*signingConfigs\s*\{\s*release\s*\{\s*signingConfig\s+signingConfigs\.release\s*\}',
+              '',
+              text,
+              flags=re.DOTALL
+          )
+
+
+          # ==================================================
+          # SIGNING CONFIGS
+          #
+          # SEMPRE INSERIDO DIRETAMENTE DENTRO DE android {}
+          # ==================================================
+
+          signing_block = '''
               signingConfigs {
                   release {
                       storeFile file("release-key.jks")
@@ -2212,62 +2188,167 @@ jobs:
                       keyPassword System.getenv("ANDROID_KEY_PASSWORD")
                   }
               }
-              '''
+          '''
 
-              android_pos = text.find(
-                  "android {"
+
+          # Remover signingConfigs existente.
+          text = re.sub(
+              r'\n\s*signingConfigs\s*\{.*?\n\s*\}',
+              '',
+              text,
+              flags=re.DOTALL
+          )
+
+
+          android_match = re.search(
+              r'android\s*\{',
+              text
+          )
+
+          if not android_match:
+
+              raise SystemExit(
+                  "ERRO: bloco android não encontrado."
               )
 
-              if android_pos == -1:
-                  raise SystemExit(
-                      "Bloco android não encontrado."
-                  )
 
-              insert_pos = (
-                  text.find(
-                      "\n",
-                      android_pos
-                  ) + 1
-              )
+          insert_pos = android_match.end()
 
-              text = (
-                  text[:insert_pos]
-                  + signing
-                  + text[insert_pos:]
-              )
+
+          text = (
+              text[:insert_pos]
+              + "\n\n"
+              + signing_block
+              + "\n"
+              + text[insert_pos:]
+          )
 
 
           # ==================================================
-          # RELEASE SIGNING
+          # BUILD TYPES
           # ==================================================
 
-          if (
-              "signingConfig signingConfigs.release"
-              not in text
-          ):
+          build_types_match = re.search(
+              r'buildTypes\s*\{',
+              text
+          )
 
-              release_pos = text.find(
-                  "release {"
+
+          if not build_types_match:
+
+              text += '''
+
+          buildTypes {
+              release {
+                  signingConfig signingConfigs.release
+              }
+          }
+          '''
+
+          else:
+
+              release_match = re.search(
+                  r'release\s*\{',
+                  text[build_types_match.end():]
               )
 
-              if release_pos == -1:
-                  raise SystemExit(
-                      "release não encontrado."
+
+              if not release_match:
+
+                  insert_pos = (
+                      build_types_match.end()
                   )
 
-              insert_pos = (
-                  text.find(
-                      "\n",
-                      release_pos
-                  ) + 1
-              )
+                  text = (
+                      text[:insert_pos]
+                      + '''
+              release {
+                  signingConfig signingConfigs.release
+              }
+          '''
+                      + text[insert_pos:]
+                  )
 
-              text = (
-                  text[:insert_pos]
-                  + "        signingConfig signingConfigs.release\n"
-                  + text[insert_pos:]
-              )
+              else:
 
+                  release_start = (
+                      build_types_match.end()
+                      + release_match.start()
+                  )
+
+                  release_open = (
+                      text.find(
+                          "{",
+                          release_start
+                      )
+                  )
+
+
+                  # Encontrar o fechamento correspondente
+                  depth = 0
+                  release_end = None
+
+                  for i in range(
+                      release_open,
+                      len(text)
+                  ):
+
+                      char = text[i]
+
+                      if char == "{":
+                          depth += 1
+
+                      elif char == "}":
+
+                          depth -= 1
+
+                          if depth == 0:
+
+                              release_end = i
+
+                              break
+
+
+                  if release_end is None:
+
+                      raise SystemExit(
+                          "ERRO: não foi possível localizar fechamento de buildTypes.release."
+                      )
+
+
+                  release_content = text[
+                      release_open + 1:
+                      release_end
+                  ]
+
+
+                  # Remover qualquer signingConfig anterior
+                  release_content = re.sub(
+                      r'^\s*signingConfig\s+signingConfigs\.[^\n]+',
+                      '',
+                      release_content,
+                      flags=re.MULTILINE
+                  )
+
+
+                  release_content = (
+                      "\n"
+                      + "        signingConfig signingConfigs.release\n"
+                      + release_content
+                      + "\n    "
+                  )
+
+
+                  text = (
+                      text[:release_open + 1]
+                      + release_content
+                      + text[release_end:]
+                  )
+
+
+          # ==================================================
+          # SALVAR
+          # ==================================================
 
           path.write_text(
               text,
@@ -2275,14 +2356,108 @@ jobs:
           )
 
           print(
-              "build.gradle configurado."
+              "build.gradle V120 configurado."
+          )
+          PY
+
+
+          # ==================================================
+          # VALIDAÇÃO CRÍTICA DO GRADLE
+          # ==================================================
+
+          echo "=================================================="
+          echo "BUILD.GRADLE DEPOIS DA CORREÇÃO"
+          echo "=================================================="
+
+          cat "$BUILD_GRADLE"
+
+
+          echo "=================================================="
+          echo "VALIDANDO CONFIGURAÇÃO"
+          echo "=================================================="
+
+
+          grep -q "compileSdk" "$BUILD_GRADLE"
+          grep -q "versionCode 120" "$BUILD_GRADLE"
+          grep -q 'versionName "1.20.0"' "$BUILD_GRADLE"
+          grep -q "signingConfigs" "$BUILD_GRADLE"
+          grep -q "storeFile file(\"release-key.jks\")" "$BUILD_GRADLE"
+          grep -q "signingConfig signingConfigs.release" "$BUILD_GRADLE"
+
+
+          # Não pode existir signingConfig dentro de signingConfigs
+          python3 - "$BUILD_GRADLE" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          text = Path(sys.argv[1]).read_text(
+              encoding="utf-8"
+          )
+
+
+          signing_match = re.search(
+              r'signingConfigs\s*\{',
+              text
+          )
+
+          if signing_match:
+
+              start = signing_match.end()
+
+              depth = 1
+              end = None
+
+              for i in range(
+                  start,
+                  len(text)
+              ):
+
+                  if text[i] == "{":
+                      depth += 1
+
+                  elif text[i] == "}":
+
+                      depth -= 1
+
+                      if depth == 0:
+                          end = i
+                          break
+
+              if end is not None:
+
+                  block = text[
+                      start:end
+                  ]
+
+                  if "signingConfig signingConfigs.release" in block:
+
+                      raise SystemExit(
+                          "ERRO CRÍTICO: signingConfig foi colocado dentro de signingConfigs."
+                      )
+
+
+          print(
+              "Estrutura signingConfigs válida."
           )
           PY
 
 
           echo "=================================================="
-          echo "VALIDANDO KEYSTORE"
+          echo "BUILD.GRADLE VALIDADO"
           echo "=================================================="
+
+
+      # ============================================================
+      # VALIDAR KEYSTORE
+      # ============================================================
+
+      - name: Validar keystore
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -e
 
           keytool \
             -list \
@@ -2295,7 +2470,7 @@ jobs:
 
 
       # ============================================================
-      # VALIDAR RECEPÇÃO WHATSAPP
+      # VALIDAR WHATSAPP
       # ============================================================
 
       - name: Validar receptor WhatsApp
@@ -2314,14 +2489,10 @@ jobs:
           echo "=================================================="
 
 
-          # MainActivity
-
           grep -q "handleSharedIntent" "$MAIN"
           grep -q "getIntent" "$MAIN"
           grep -q "onNewIntent" "$MAIN"
 
-
-          # PermissionBridge
 
           grep -q "ACTION_SEND" "$BRIDGE"
           grep -q "ACTION_SEND_MULTIPLE" "$BRIDGE"
@@ -2334,13 +2505,9 @@ jobs:
           grep -q "readSharedMedia" "$BRIDGE"
 
 
-          # Correção Java
-
           grep -q "private boolean copyFile" "$BRIDGE"
           grep -q "catch (IOException e)" "$BRIDGE"
 
-
-          # Manifest
 
           grep -q "RECORD_AUDIO" "$MANIFEST"
           grep -q "singleTask" "$MANIFEST"
@@ -2350,7 +2517,7 @@ jobs:
 
           echo "=================================================="
           echo "BRIDGE WHATSAPP OK"
-          echo "TRATAMENTO DE IOException OK"
+          echo "IOEXCEPTION OK"
           echo "MANIFEST OK"
           echo "=================================================="
 
@@ -2394,7 +2561,7 @@ jobs:
 
 
       # ============================================================
-      # APK
+      # LOCALIZAR APK
       # ============================================================
 
       - name: Localizar APK final
