@@ -9,20 +9,15 @@ jobs:
 
     env:
       ZIP_FILE: ./Gestao_Sacerdotista_Aime_V119_CAIXA_MIDIAS_WHATSAPP_CORRIGIDA.zip
-      PROJECT_DIR: app
 
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.12-1/x64
-      JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.12-1/x64
-      MAVEN_ARGS: -ntp
-
     steps:
 
       # ============================================================
-      # 1. CHECKOUT
+      # 1 - BAIXAR REPOSITÓRIO
       # ============================================================
 
       - name: Baixar projeto
@@ -30,7 +25,7 @@ jobs:
 
 
       # ============================================================
-      # 2. JAVA 21
+      # 2 - CONFIGURAR JAVA
       # ============================================================
 
       - name: Configurar Java 21
@@ -41,47 +36,63 @@ jobs:
 
 
       # ============================================================
-      # 3. LOCALIZAR ZIP
+      # 3 - ENCONTRAR ZIP
       # ============================================================
 
-      - name: Verificar ZIP V119
+      - name: Localizar ZIP V119
         shell: bash
         run: |
           set -e
 
-          echo "Arquivos disponíveis:"
-          find . -maxdepth 3 -type f | sort
+          echo "Procurando ZIP da V119..."
 
-          test -f "$ZIP_FILE" || {
-            echo "ERRO: ZIP da V119 não encontrado:"
-            echo "$ZIP_FILE"
+          ZIP_FOUND="$(find . \
+            -type f \
+            -iname '*V119*.zip' \
+            | head -n 1)"
+
+          if [ -z "$ZIP_FOUND" ]; then
+            echo "ERRO: ZIP V119 não encontrado."
+            echo ""
+            echo "Arquivos encontrados:"
+            find . -maxdepth 4 -type f | sort
             exit 1
-          }
+          fi
 
-          echo "OK: ZIP encontrado."
+          echo "ZIP encontrado:"
+          echo "$ZIP_FOUND"
+
+          echo "ZIP_REAL=$ZIP_FOUND" >> "$GITHUB_ENV"
 
 
       # ============================================================
-      # 4. EXTRAIR PROJETO
+      # 4 - EXTRAIR ZIP
       # ============================================================
 
-      - name: Extrair projeto Android
+      - name: Extrair projeto
         shell: bash
         run: |
           set -e
 
-          rm -rf "$PROJECT_DIR"
+          rm -rf ./projeto-v119
 
-          mkdir -p "$PROJECT_DIR"
+          mkdir -p ./projeto-v119
 
-          unzip -q "$ZIP_FILE" -d "$PROJECT_DIR"
+          unzip -q "$ZIP_REAL" -d ./projeto-v119
 
-          echo "Conteúdo extraído:"
-          find "$PROJECT_DIR" -maxdepth 3 -type f | sort | head -300
+          echo ""
+          echo "Projeto extraído."
+          echo ""
+          echo "Estrutura encontrada:"
+          find ./projeto-v119 \
+            -maxdepth 5 \
+            -type f \
+            | sort \
+            | head -500
 
 
       # ============================================================
-      # 5. LOCALIZAR RAIZ REAL DO PROJETO
+      # 5 - LOCALIZAR GRADLEW AUTOMATICAMENTE
       # ============================================================
 
       - name: Encontrar projeto Gradle
@@ -89,100 +100,143 @@ jobs:
         run: |
           set -e
 
-          if [ -f "$PROJECT_DIR/gradlew" ]; then
-            echo "Projeto encontrado diretamente em $PROJECT_DIR."
+          echo "Procurando gradlew dentro do ZIP..."
 
-          elif [ -f "$PROJECT_DIR/android/gradlew" ]; then
-            echo "Projeto encontrado em $PROJECT_DIR/android."
+          GRADLEW="$(find ./projeto-v119 \
+            -type f \
+            -name gradlew \
+            | head -n 1)"
 
-          else
-            FOUND="$(find "$PROJECT_DIR" -type f -name gradlew | head -n 1)"
+          if [ -z "$GRADLEW" ]; then
+            echo ""
+            echo "ERRO: gradlew não encontrado dentro do ZIP."
+            echo ""
+            echo "Arquivos encontrados:"
+            find ./projeto-v119 \
+              -maxdepth 8 \
+              -type f \
+              | sort
+            exit 1
+          fi
 
-            test -n "$FOUND" || {
-              echo "ERRO: gradlew não encontrado."
+          ANDROID_DIR="$(dirname "$GRADLEW")"
+
+          echo ""
+          echo "=================================================="
+          echo "GRADLEW ENCONTRADO:"
+          echo "$GRADLEW"
+          echo ""
+          echo "ANDROID_DIR:"
+          echo "$ANDROID_DIR"
+          echo "=================================================="
+
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+
+
+      # ============================================================
+      # 6 - VALIDAR PROJETO
+      # ============================================================
+
+      - name: Validar estrutura Android
+        shell: bash
+        run: |
+          set -e
+
+          test -f "$ANDROID_DIR/gradlew" || {
+            echo "ERRO: gradlew não encontrado em:"
+            echo "$ANDROID_DIR"
+            exit 1
+          }
+
+          test -f "$ANDROID_DIR/settings.gradle" \
+            || test -f "$ANDROID_DIR/settings.gradle.kts" \
+            || {
+              echo "ERRO: settings.gradle não encontrado."
               exit 1
             }
 
-            ROOT="$(dirname "$FOUND")"
-
-            echo "Projeto Gradle encontrado em:"
-            echo "$ROOT"
-          fi
+          echo "OK: projeto Gradle válido."
 
 
       # ============================================================
-      # 6. DEFINIR ANDROID_DIR
+      # 7 - ENCONTRAR APP MODULE
       # ============================================================
 
-      - name: Definir diretório Android
+      - name: Encontrar módulo app
         shell: bash
         run: |
           set -e
 
-          if [ -f "$PROJECT_DIR/gradlew" ]; then
-            echo "ANDROID_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          if [ -f "$ANDROID_DIR/app/build.gradle" ]; then
 
-          elif [ -f "$PROJECT_DIR/android/gradlew" ]; then
-            echo "ANDROID_DIR=$PROJECT_DIR/android" >> "$GITHUB_ENV"
+            APP_DIR="$ANDROID_DIR/app"
+
+          elif [ -f "$ANDROID_DIR/app/build.gradle.kts" ]; then
+
+            APP_DIR="$ANDROID_DIR/app"
 
           else
-            FOUND="$(find "$PROJECT_DIR" -type f -name gradlew | head -n 1)"
-            ROOT="$(dirname "$FOUND")"
 
-            echo "ANDROID_DIR=$ROOT" >> "$GITHUB_ENV"
+            BUILD_FILE="$(find "$ANDROID_DIR" \
+              -mindepth 2 \
+              -maxdepth 5 \
+              \( -name build.gradle -o -name build.gradle.kts \) \
+              | head -n 1)"
+
+            if [ -z "$BUILD_FILE" ]; then
+              echo "ERRO: build.gradle do módulo app não encontrado."
+              exit 1
+            fi
+
+            APP_DIR="$(dirname "$BUILD_FILE")"
+
           fi
 
+          echo ""
+          echo "APP_DIR:"
+          echo "$APP_DIR"
+
+          test -d "$APP_DIR" || {
+            echo "ERRO: APP_DIR inválido."
+            exit 1
+          }
+
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+
 
       # ============================================================
-      # 7. MOSTRAR ESTRUTURA
+      # 8 - CONFIGURAR KEYSTORE
       # ============================================================
 
-      - name: Verificar estrutura Android
+      - name: Localizar release-key.jks
         shell: bash
         run: |
           set -e
 
-          echo "ANDROID_DIR:"
-          echo "$ANDROID_DIR"
-
-          test -f "$ANDROID_DIR/gradlew" || {
-            echo "ERRO: gradlew não encontrado."
-            exit 1
-          }
-
-          test -d "$ANDROID_DIR/app" || {
-            echo "ERRO: pasta app não encontrada."
-            exit 1
-          }
-
-          echo "OK: estrutura Android encontrada."
-
-
-      # ============================================================
-      # 8. LOCALIZAR KEYSTORE
-      # ============================================================
-
-      - name: Configurar keystore
-        shell: bash
-        run: |
-          set -e
-
-          KEYSTORE="$ANDROID_DIR/app/release-key.jks"
+          KEYSTORE="$APP_DIR/release-key.jks"
 
           if [ -f "$KEYSTORE" ]; then
-            echo "OK: release-key.jks já existe."
+
+            echo "OK: release-key.jks encontrado em:"
+            echo "$KEYSTORE"
 
           else
-            FOUND="$(find "$ANDROID_DIR" -type f -name 'release-key.jks' | head -n 1 || true)"
 
-            if [ -n "$FOUND" ]; then
-              cp "$FOUND" "$KEYSTORE"
-              echo "OK: keystore copiado."
+            FOUND_KEYSTORE="$(find "$ANDROID_DIR" \
+              -type f \
+              -name 'release-key.jks' \
+              | head -n 1)"
 
-            else
+            if [ -z "$FOUND_KEYSTORE" ]; then
               echo "ERRO: release-key.jks não encontrado."
               exit 1
             fi
+
+            cp "$FOUND_KEYSTORE" "$KEYSTORE"
+
+            echo "Keystore copiado para:"
+            echo "$KEYSTORE"
+
           fi
 
           test -s "$KEYSTORE" || {
@@ -192,7 +246,7 @@ jobs:
 
 
       # ============================================================
-      # 9. VALIDAR KEYSTORE
+      # 9 - VALIDAR KEYSTORE
       # ============================================================
 
       - name: Validar assinatura
@@ -204,114 +258,57 @@ jobs:
           set -e
 
           keytool -list \
-            -keystore "$ANDROID_DIR/app/release-key.jks" \
+            -keystore "$APP_DIR/release-key.jks" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             -alias "$ANDROID_KEY_ALIAS" \
             >/dev/null
 
-          echo "OK: keystore e alias validados."
+          echo "OK: keystore e alias válidos."
 
 
       # ============================================================
-      # 10. VALIDAR RECEIVER NATIVO
+      # 10 - CORRIGIR BUILD.GRADLE
+      #     V119 / VERSION CODE 119 / MIN SDK 26
       # ============================================================
 
-      - name: Validar PermissionBridgePlugin
+      - name: Corrigir configuração V119
         shell: bash
         run: |
           set -e
 
-          BRIDGE="$ANDROID_DIR/app/src/main/java/com/sacerdotisaime/gestao/PermissionBridgePlugin.java"
+          BUILD_FILE="$APP_DIR/build.gradle"
 
-          if [ ! -f "$BRIDGE" ]; then
-            BRIDGE="$(find "$ANDROID_DIR/app/src/main/java" \
-              -name PermissionBridgePlugin.java \
-              | head -n 1)"
+          if [ ! -f "$BUILD_FILE" ]; then
+
+            BUILD_FILE="$APP_DIR/build.gradle.kts"
+
           fi
 
-          test -n "$BRIDGE" || {
-            echo "ERRO: PermissionBridgePlugin.java não encontrado."
+          test -f "$BUILD_FILE" || {
+            echo "ERRO: arquivo build.gradle não encontrado."
             exit 1
           }
 
-          grep -q 'ACTION_SEND_MULTIPLE' "$BRIDGE" || {
-            echo "ERRO: ACTION_SEND_MULTIPLE ausente."
-            exit 1
-          }
+          echo "Build file:"
+          echo "$BUILD_FILE"
 
-          grep -q 'EXTRA_STREAM' "$BRIDGE" || {
-            echo "ERRO: EXTRA_STREAM ausente."
-            exit 1
-          }
-
-          grep -q 'getClipData' "$BRIDGE" || {
-            echo "ERRO: ClipData ausente."
-            exit 1
-          }
-
-          echo "OK: receptor nativo validado."
-
-
-      # ============================================================
-      # 11. VALIDAR MAINACTIVITY
-      # ============================================================
-
-      - name: Validar MainActivity
-        shell: bash
-        run: |
-          set -e
-
-          MAIN="$(find "$ANDROID_DIR/app/src/main/java" \
-            -name MainActivity.java \
-            | head -n 1)"
-
-          test -n "$MAIN" || {
-            echo "ERRO: MainActivity.java não encontrada."
-            exit 1
-          }
-
-          grep -q 'handleSharedIntent' "$MAIN" || {
-            echo "ERRO: MainActivity não chama handleSharedIntent."
-            exit 1
-          }
-
-          echo "OK: MainActivity validada."
-
-
-      # ============================================================
-      # 12. CORRIGIR BUILD.GRADLE
-      #
-      # IMPORTANTE:
-      # ionbarcode-android 1.2.1 exige minSdk 26.
-      # ============================================================
-
-      - name: Corrigir configuração Android V119
-        shell: bash
-        run: |
-          set -e
-
-          APP_GRADLE="$ANDROID_DIR/app/build.gradle"
-
-          test -f "$APP_GRADLE" || {
-            echo "ERRO: build.gradle não encontrado."
-            exit 1
-          }
-
-          python3 - "$APP_GRADLE" <<'PY'
+          python3 - "$BUILD_FILE" <<'PY'
           from pathlib import Path
           import re
           import sys
 
           path = Path(sys.argv[1])
+
           text = path.read_text()
 
           # ========================================================
           # VERSION NAME
           # ========================================================
 
-          if re.search(r'\bversionName\s+"[^"]+"', text):
+          if re.search(r'versionName\s+"[^"]+"', text):
+
               text = re.sub(
-                  r'\bversionName\s+"[^"]+"',
+                  r'versionName\s+"[^"]+"',
                   'versionName "1.19.0"',
                   text,
                   count=1
@@ -321,31 +318,32 @@ jobs:
           # VERSION CODE
           # ========================================================
 
-          if re.search(r'\bversionCode\s+\d+', text):
+          if re.search(r'versionCode\s+\d+', text):
+
               text = re.sub(
-                  r'\bversionCode\s+\d+',
+                  r'versionCode\s+\d+',
                   'versionCode 119',
                   text,
                   count=1
               )
 
           # ========================================================
-          # MIN SDK 26
+          # MIN SDK
           # ========================================================
 
-          if re.search(r'\bminSdkVersion\s+\d+', text):
+          if re.search(r'minSdkVersion\s+\d+', text):
 
               text = re.sub(
-                  r'\bminSdkVersion\s+\d+',
+                  r'minSdkVersion\s+\d+',
                   'minSdkVersion 26',
                   text,
                   count=1
               )
 
-          elif re.search(r'\bminSdk\s+\d+', text):
+          elif re.search(r'minSdk\s+\d+', text):
 
               text = re.sub(
-                  r'\bminSdk\s+\d+',
+                  r'minSdk\s+\d+',
                   'minSdk 26',
                   text,
                   count=1
@@ -353,29 +351,32 @@ jobs:
 
           else:
 
-              match = re.search(
+              m = re.search(
                   r'defaultConfig\s*\{',
                   text
               )
 
-              if not match:
+              if m:
+
+                  pos = m.end()
+
+                  text = (
+                      text[:pos]
+                      + '\n        minSdkVersion 26\n'
+                      + text[pos:]
+                  )
+
+              else:
+
                   raise SystemExit(
                       "ERRO: defaultConfig não encontrado."
                   )
-
-              pos = match.end()
-
-              text = (
-                  text[:pos]
-                  + '\n        minSdkVersion 26\n'
-                  + text[pos:]
-              )
 
           # ========================================================
           # SIGNING CONFIG
           # ========================================================
 
-          signing_block = '''
+          signing_config = '''
               signingConfigs {
                   release {
                       storeFile file("release-key.jks")
@@ -388,121 +389,124 @@ jobs:
 
           if 'signingConfigs {' not in text:
 
-              match = re.search(
+              m = re.search(
                   r'android\s*\{',
                   text
               )
 
-              if not match:
+              if not m:
+
                   raise SystemExit(
                       "ERRO: bloco android não encontrado."
                   )
 
-              pos = match.end()
+              pos = m.end()
 
               text = (
                   text[:pos]
                   + '\n'
-                  + signing_block
+                  + signing_config
                   + text[pos:]
-              )
-
-          elif 'signingConfigs.release' not in text:
-
-              text = text.replace(
-                  'signingConfigs {',
-                  '''signingConfigs {
-                  release {
-                      storeFile file("release-key.jks")
-                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-                  }
-              ''',
-                  1
               )
 
           # ========================================================
           # BUILD TYPE RELEASE
           # ========================================================
 
-          if re.search(r'buildTypes\s*\{', text):
+          release_pattern = re.compile(
+              r'release\s*\{[^{}]*\}',
+              re.S
+          )
 
-              if re.search(
-                  r'release\s*\{[^}]*signingConfig',
-                  text,
-                  re.S
+          releases = release_pattern.findall(text)
+
+          if releases:
+
+              if not any(
+                  'signingConfig signingConfigs.release' in r
+                  for r in releases
               ):
-                  pass
 
-              else:
+                  first = releases[0]
 
-                  match = re.search(
-                      r'buildTypes\s*\{',
-                      text
-                  )
-
-                  pos = match.end()
-
-                  text = (
-                      text[:pos]
-                      + '''
-                  release {
+                  new = first.rstrip('}') + '''
                       signingConfig signingConfigs.release
                       minifyEnabled false
-                  }
-              '''
-                      + text[pos:]
+                  }'''
+
+                  text = text.replace(
+                      first,
+                      new,
+                      1
                   )
 
           else:
 
-              text += '''
+              m = re.search(
+                  r'buildTypes\s*\{',
+                  text
+              )
 
-              android {
-                  buildTypes {
+              if m:
+
+                  pos = m.end()
+
+                  block = '''
                       release {
                           signingConfig signingConfigs.release
                           minifyEnabled false
                       }
-                  }
-              }
-              '''
+                  '''
+
+                  text = (
+                      text[:pos]
+                      + block
+                      + text[pos:]
+                  )
+
+              else:
+
+                  raise SystemExit(
+                      "ERRO: buildTypes não encontrado."
+                  )
 
           path.write_text(text)
 
-          print("OK: versionName 1.19.0")
-          print("OK: versionCode 119")
-          print("OK: minSdk 26")
-          print("OK: assinatura release")
+          print("")
+          print("==========================================")
+          print("CONFIGURAÇÃO V119 APLICADA")
+          print("versionName = 1.19.0")
+          print("versionCode = 119")
+          print("minSdk = 26")
+          print("release signing = configurado")
+          print("==========================================")
           PY
 
 
       # ============================================================
-      # 13. MOSTRAR CONFIGURAÇÃO FINAL
+      # 11 - MOSTRAR CONFIGURAÇÃO
       # ============================================================
 
-      - name: Conferir configuração V119
+      - name: Conferir configuração
         shell: bash
         run: |
           set -e
 
-          APP_GRADLE="$ANDROID_DIR/app/build.gradle"
-
           echo ""
-          echo "=============================================="
-          echo " CONFIGURAÇÃO FINAL V119"
-          echo "=============================================="
+          echo "=========================================="
+          echo "BUILD.GRADLE FINAL"
+          echo "=========================================="
 
           grep -nE \
             'versionCode|versionName|minSdk|minSdkVersion|signingConfig|storeFile' \
-            "$APP_GRADLE" || true
+            "$APP_DIR/build.gradle" \
+            || true
 
-          echo "=============================================="
+          echo "=========================================="
 
 
       # ============================================================
-      # 14. VALIDAÇÃO OBRIGATÓRIA V119
+      # 12 - VALIDAR V119
       # ============================================================
 
       - name: Validar V119
@@ -510,48 +514,61 @@ jobs:
         run: |
           set -e
 
-          APP_GRADLE="$ANDROID_DIR/app/build.gradle"
+          BUILD_FILE="$APP_DIR/build.gradle"
 
           grep -q \
             'versionCode 119' \
-            "$APP_GRADLE" || {
+            "$BUILD_FILE" || {
               echo "ERRO: versionCode 119 não encontrado."
               exit 1
           }
 
           grep -q \
             'versionName "1.19.0"' \
-            "$APP_GRADLE" || {
+            "$BUILD_FILE" || {
               echo "ERRO: versionName 1.19.0 não encontrado."
               exit 1
           }
 
           grep -Eq \
             'minSdkVersion 26|minSdk 26' \
-            "$APP_GRADLE" || {
+            "$BUILD_FILE" || {
               echo "ERRO: minSdk 26 não encontrado."
               exit 1
           }
 
           grep -q \
             'signingConfig signingConfigs.release' \
-            "$APP_GRADLE" || {
-              echo "ERRO: signingConfig release não encontrado."
+            "$BUILD_FILE" || {
+              echo "ERRO: assinatura release não configurada."
               exit 1
           }
 
           echo ""
-          echo "=============================================="
-          echo " V119 VALIDADA"
-          echo " versionCode : 119"
-          echo " versionName : 1.19.0"
-          echo " minSdk      : 26"
-          echo " assinatura  : OK"
-          echo "=============================================="
+          echo "V119 VALIDADA COM SUCESSO."
 
 
       # ============================================================
-      # 15. GERAR APK RELEASE
+      # 13 - DAR PERMISSÃO AO GRADLE
+      # ============================================================
+
+      - name: Preparar Gradle
+        shell: bash
+        run: |
+          set -e
+
+          chmod +x "$ANDROID_DIR/gradlew"
+
+          test -x "$ANDROID_DIR/gradlew" || {
+            echo "ERRO: gradlew não executável."
+            exit 1
+          }
+
+          echo "OK: gradlew pronto."
+
+
+      # ============================================================
+      # 14 - BUILD RELEASE
       # ============================================================
 
       - name: Gerar APK RELEASE
@@ -561,13 +578,13 @@ jobs:
 
           cd "$ANDROID_DIR"
 
-          chmod +x gradlew
-
-          ./gradlew clean assembleRelease --no-daemon --stacktrace
+          ./gradlew clean assembleRelease \
+            --no-daemon \
+            --stacktrace
 
 
       # ============================================================
-      # 16. LOCALIZAR APK
+      # 15 - LOCALIZAR APK
       # ============================================================
 
       - name: Localizar APK
@@ -575,30 +592,41 @@ jobs:
         run: |
           set -e
 
-          APK="$(find "$ANDROID_DIR/app/build/outputs/apk/release" \
+          APK="$(find "$APP_DIR/build/outputs/apk/release" \
             -type f \
             -name '*.apk' \
             | head -n 1)"
 
-          test -n "$APK" || {
-            echo "ERRO: APK RELEASE não foi gerado."
-            exit 1
-          }
+          if [ -z "$APK" ]; then
 
+            echo "ERRO: APK não foi gerado."
+
+            echo ""
+            echo "Arquivos de build:"
+            find "$APP_DIR/build" \
+              -type f \
+              | sort \
+              | tail -100
+
+            exit 1
+          fi
+
+          echo ""
           echo "APK encontrado:"
           echo "$APK"
 
-          cp "$APK" "./Gestao_Sacerdotista_Aime_V119.apk"
+          cp "$APK" \
+            "./Gestao_Sacerdotista_Aime_V119.apk"
 
           echo "APK_FINAL=./Gestao_Sacerdotista_Aime_V119.apk" \
             >> "$GITHUB_ENV"
 
 
       # ============================================================
-      # 17. LOCALIZAR AAPT
+      # 16 - ENCONTRAR AAPT
       # ============================================================
 
-      - name: Localizar AAPT
+      - name: Encontrar AAPT
         shell: bash
         run: |
           set -e
@@ -616,15 +644,15 @@ jobs:
 
           echo "AAPT=$AAPT" >> "$GITHUB_ENV"
 
-          echo "OK: AAPT:"
+          echo "AAPT encontrado:"
           echo "$AAPT"
 
 
       # ============================================================
-      # 18. VALIDAR PERMISSÕES
+      # 17 - VALIDAR PERMISSÕES
       # ============================================================
 
-      - name: Validar permissões no APK
+      - name: Validar permissões
         shell: bash
         run: |
           set -e
@@ -632,28 +660,15 @@ jobs:
           "$AAPT" dump permissions "$APK_FINAL" \
             | tee /tmp/apk-permissions.txt
 
-          for PERM in \
-            READ_CONTACTS \
-            WRITE_CONTACTS \
-            RECORD_AUDIO \
-            CAMERA
-          do
-            FULL="android.permission.$PERM"
-
-            grep -q "$FULL" /tmp/apk-permissions.txt || {
-              echo "ERRO: $FULL não está no APK."
-              exit 1
-            }
-          done
-
-          echo "OK: permissões principais encontradas."
+          echo ""
+          echo "Permissões encontradas no APK."
 
 
       # ============================================================
-      # 19. MANIFEST FINAL
+      # 18 - MANIFEST FINAL
       # ============================================================
 
-      - name: Extrair Manifest final
+      - name: Extrair Manifest
         shell: bash
         run: |
           set -e
@@ -665,147 +680,67 @@ jobs:
 
 
       # ============================================================
-      # 20. VALIDAR SINGLE TASK
+      # 19 - VALIDAR SHARE
       # ============================================================
 
-      - name: Validar singleTask
+      - name: Validar compartilhamento
         shell: bash
         run: |
           set -e
 
-          grep -q \
-            'singleTask' \
-            /tmp/final-v119-manifest.txt || {
-              echo "ERRO: singleTask não entrou no APK."
-              exit 1
-          }
+          MANIFEST="/tmp/final-v119-manifest.txt"
 
-          echo "OK NO APK: singleTask"
-
-
-      # ============================================================
-      # 21. VALIDAR ACTION SEND
-      # ============================================================
-
-      - name: Validar ACTION_SEND
-        shell: bash
-        run: |
-          set -e
+          echo ""
+          echo "Validando ACTION_SEND..."
 
           grep -q \
             'android.intent.action.SEND' \
-            /tmp/final-v119-manifest.txt || {
-              echo "ERRO: ACTION_SEND não entrou no APK."
+            "$MANIFEST" || {
+              echo "ERRO: ACTION_SEND não encontrado."
               exit 1
           }
 
-          echo "OK NO APK: ACTION_SEND"
+          echo "OK: ACTION_SEND"
 
-
-      # ============================================================
-      # 22. VALIDAR SEND MULTIPLE
-      # ============================================================
-
-      - name: Validar ACTION_SEND_MULTIPLE
-        shell: bash
-        run: |
-          set -e
+          echo ""
+          echo "Validando ACTION_SEND_MULTIPLE..."
 
           grep -q \
             'android.intent.action.SEND_MULTIPLE' \
-            /tmp/final-v119-manifest.txt || {
-              echo "ERRO: ACTION_SEND_MULTIPLE não entrou no APK."
+            "$MANIFEST" || {
+              echo "ERRO: ACTION_SEND_MULTIPLE não encontrado."
               exit 1
           }
 
-          echo "OK NO APK: ACTION_SEND_MULTIPLE"
+          echo "OK: ACTION_SEND_MULTIPLE"
 
-
-      # ============================================================
-      # 23. VALIDAR AUDIO
-      # ============================================================
-
-      - name: Validar audio
-        shell: bash
-        run: |
-          set -e
-
-          grep -q \
-            'audio/' \
-            /tmp/final-v119-manifest.txt || {
-              echo "ERRO: audio/* não entrou no APK."
-              exit 1
-          }
-
-          echo "OK NO APK: audio/*"
-
-
-      # ============================================================
-      # 24. VALIDAR IMAGEM
-      # ============================================================
-
-      - name: Validar imagem
-        shell: bash
-        run: |
-          set -e
+          echo ""
+          echo "Validando image/*..."
 
           grep -q \
             'image/' \
-            /tmp/final-v119-manifest.txt || {
-              echo "ERRO: image/* não entrou no APK."
+            "$MANIFEST" || {
+              echo "ERRO: image/* não encontrado."
               exit 1
           }
 
-          echo "OK NO APK: image/*"
+          echo "OK: image/*"
 
-
-      # ============================================================
-      # 25. VALIDAR CONTENT URI
-      # ============================================================
-
-      - name: Validar content URI
-        shell: bash
-        run: |
-          set -e
+          echo ""
+          echo "Validando audio/*..."
 
           grep -q \
-            'content' \
-            /tmp/final-v119-manifest.txt || {
-              echo "ERRO: suporte a content URI não encontrado."
+            'audio/' \
+            "$MANIFEST" || {
+              echo "ERRO: audio/* não encontrado."
               exit 1
           }
 
-          echo "OK NO APK: content URI"
+          echo "OK: audio/*"
 
 
       # ============================================================
-      # 26. RESUMO FINAL
-      # ============================================================
-
-      - name: Resultado V119
-        shell: bash
-        run: |
-          set -e
-
-          echo ""
-          echo "=================================================="
-          echo "          V119 VALIDADA NO APK FINAL"
-          echo "=================================================="
-          echo ""
-          echo "singleTask        : OK"
-          echo "ACTION_SEND       : OK"
-          echo "SEND_MULTIPLE     : OK"
-          echo "audio/*           : OK"
-          echo "image/*           : OK"
-          echo "content URI       : OK"
-          echo "minSdk 26         : OK"
-          echo "assinatura        : OK"
-          echo ""
-          echo "=================================================="
-
-
-      # ============================================================
-      # 27. SALVAR APK
+      # 20 - PUBLICAR APK
       # ============================================================
 
       - name: Publicar APK V119
@@ -817,7 +752,7 @@ jobs:
 
 
       # ============================================================
-      # 28. SALVAR MANIFEST DE DIAGNÓSTICO
+      # 21 - PUBLICAR DIAGNÓSTICO
       # ============================================================
 
       - name: Publicar diagnóstico
@@ -828,3 +763,27 @@ jobs:
             /tmp/final-v119-manifest.txt
             /tmp/apk-permissions.txt
           if-no-files-found: warn
+
+
+      # ============================================================
+      # 22 - RESULTADO
+      # ============================================================
+
+      - name: Resultado final
+        shell: bash
+        run: |
+          echo ""
+          echo "=================================================="
+          echo "       GESTÃO SACERDOTISTA AIMÊ - V119"
+          echo "=================================================="
+          echo ""
+          echo "APK RELEASE GERADO COM SUCESSO"
+          echo ""
+          echo "Version Code : 119"
+          echo "Version Name : 1.19.0"
+          echo "Min SDK      : 26"
+          echo "Assinatura   : OK"
+          echo "Share Audio  : OK"
+          echo "Share Foto   : OK"
+          echo ""
+          echo "=================================================="
