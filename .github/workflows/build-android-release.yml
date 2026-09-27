@@ -140,7 +140,6 @@ jobs:
           set -e
 
           rm -rf app
-
           mkdir -p app
 
           unzip -q "$ZIP_FILE" -d app
@@ -179,7 +178,7 @@ jobs:
 
 
       # ============================================================
-      # 8. AJUSTAR DEPENDÊNCIAS
+      # 8. DEPENDÊNCIAS
       # ============================================================
 
       - name: Ajustar dependências
@@ -224,7 +223,7 @@ jobs:
 
 
       # ============================================================
-      # 9. INSTALAR
+      # 9. NPM INSTALL
       # ============================================================
 
       - name: Instalar dependências
@@ -528,7 +527,10 @@ jobs:
                 return result;
               }
 
-              result.put("id", parts[0]);
+              result.put(
+                "id",
+                parts[0]
+              );
 
               result.put(
                 "mimeType",
@@ -596,28 +598,54 @@ jobs:
             }
 
 
-            private boolean startsWith(
+            // ========================================================
+            // DETECÇÃO DE ARQUIVOS
+            // ========================================================
+
+            private boolean byteAt(
               byte[] data,
               int length,
-              byte... signature
+              int index,
+              int expected
             ) {
 
               if (
-                length <
-                signature.length
+                index < 0 ||
+                index >= length
+              ) {
+                return false;
+              }
+
+              return (data[index] & 0xff) ==
+                (expected & 0xff);
+            }
+
+
+            private boolean signature(
+              byte[] data,
+              int length,
+              int... values
+            ) {
+
+              if (
+                length < values.length
               ) {
                 return false;
               }
 
               for (
                 int i = 0;
-                i < signature.length;
+                i < values.length;
                 i++
               ) {
 
                 if (
-                  data[i] !=
-                  signature[i]
+                  !byteAt(
+                    data,
+                    length,
+                    i,
+                    values[i]
+                  )
                 ) {
                   return false;
                 }
@@ -634,6 +662,7 @@ jobs:
                 new byte[64];
 
               int length = 0;
+
 
               try (
                 InputStream input =
@@ -664,21 +693,29 @@ jobs:
               }
 
 
+              // JPEG
+
               if (
-                length >= 3 &&
-                (h[0] & 0xff) == 0xff &&
-                (h[1] & 0xff) == 0xd8 &&
-                (h[2] & 0xff) == 0xff
+                signature(
+                  h,
+                  length,
+                  0xff,
+                  0xd8,
+                  0xff
+                )
               ) {
+
                 return "photo|image/jpeg";
               }
 
 
+              // PNG
+
               if (
-                startsWith(
+                signature(
                   h,
                   length,
-                  (byte)0x89,
+                  0x89,
                   0x50,
                   0x4e,
                   0x47,
@@ -688,13 +725,16 @@ jobs:
                   0x0a
                 )
               ) {
+
                 return "photo|image/png";
               }
 
 
+              // WEBP
+
               if (
                 length >= 12 &&
-                startsWith(
+                signature(
                   h,
                   length,
                   0x52,
@@ -702,17 +742,20 @@ jobs:
                   0x46,
                   0x46
                 ) &&
-                h[8] == 'W' &&
-                h[9] == 'E' &&
-                h[10] == 'B' &&
-                h[11] == 'P'
+                byteAt(h, length, 8, 'W') &&
+                byteAt(h, length, 9, 'E') &&
+                byteAt(h, length, 10, 'B') &&
+                byteAt(h, length, 11, 'P')
               ) {
+
                 return "photo|image/webp";
               }
 
 
+              // OGG / OPUS
+
               if (
-                startsWith(
+                signature(
                   h,
                   length,
                   0x4f,
@@ -721,13 +764,16 @@ jobs:
                   0x53
                 )
               ) {
+
                 return "audio|audio/ogg";
               }
 
 
+              // WAV
+
               if (
                 length >= 12 &&
-                startsWith(
+                signature(
                   h,
                   length,
                   0x52,
@@ -735,17 +781,20 @@ jobs:
                   0x46,
                   0x46
                 ) &&
-                h[8] == 'W' &&
-                h[9] == 'A' &&
-                h[10] == 'V' &&
-                h[11] == 'E'
+                byteAt(h, length, 8, 'W') &&
+                byteAt(h, length, 9, 'A') &&
+                byteAt(h, length, 10, 'V') &&
+                byteAt(h, length, 11, 'E')
               ) {
+
                 return "audio|audio/wav";
               }
 
 
+              // MP3 com ID3
+
               if (
-                startsWith(
+                signature(
                   h,
                   length,
                   0x49,
@@ -753,25 +802,41 @@ jobs:
                   0x33
                 )
               ) {
+
                 return "audio|audio/mpeg";
               }
 
+
+              // MP3 sem ID3
 
               if (
-                length >= 2 &&
-                (h[0] & 0xff) == 0xff &&
-                (h[1] & 0xe0) == 0xe0
+                length >= 2
               ) {
-                return "audio|audio/mpeg";
+
+                int first =
+                  h[0] & 0xff;
+
+                int second =
+                  h[1] & 0xff;
+
+                if (
+                  first == 0xff &&
+                  (second & 0xe0) == 0xe0
+                ) {
+
+                  return "audio|audio/mpeg";
+                }
               }
 
+
+              // MP4 / M4A / HEIC
 
               if (
                 length >= 12 &&
-                h[4] == 'f' &&
-                h[5] == 't' &&
-                h[6] == 'y' &&
-                h[7] == 'p'
+                byteAt(h, length, 4, 'f') &&
+                byteAt(h, length, 5, 't') &&
+                byteAt(h, length, 6, 'y') &&
+                byteAt(h, length, 7, 'p')
               ) {
 
                 String brand =
@@ -782,6 +847,7 @@ jobs:
                     StandardCharsets.US_ASCII
                   );
 
+
                 if (
                   brand.equals("heic") ||
                   brand.equals("heix") ||
@@ -790,20 +856,25 @@ jobs:
                   brand.equals("mif1") ||
                   brand.equals("msf1")
                 ) {
+
                   return "photo|image/heic";
                 }
+
 
                 if (
                   brand.equals("M4A ") ||
                   brand.equals("M4B ")
                 ) {
+
                   return "audio|audio/mp4";
                 }
               }
 
 
+              // WEBM / MATROSKA
+
               if (
-                startsWith(
+                signature(
                   h,
                   length,
                   0x1a,
@@ -812,6 +883,7 @@ jobs:
                   0xa3
                 )
               ) {
+
                 return "audio|audio/webm";
               }
 
@@ -832,6 +904,7 @@ jobs:
                       Locale.US
                     );
 
+
               if (
                 lower.matches(
                   ".*\\.(ogg|opus|m4a|aac|mp3|wav|amr|3gp|webm|mp4)$"
@@ -843,45 +916,86 @@ jobs:
                 );
               }
 
-              if (mime.contains("ogg")) {
+
+              if (
+                mime != null &&
+                mime.contains("ogg")
+              ) {
                 return "ogg";
               }
 
-              if (mime.contains("mpeg")) {
+
+              if (
+                mime != null &&
+                mime.contains("mpeg")
+              ) {
                 return "mp3";
               }
 
-              if (mime.contains("wav")) {
+
+              if (
+                mime != null &&
+                mime.contains("wav")
+              ) {
                 return "wav";
               }
 
-              if (mime.contains("webm")) {
+
+              if (
+                mime != null &&
+                mime.contains("webm")
+              ) {
                 return "webm";
               }
 
-              if (mime.contains("mp4")) {
+
+              if (
+                mime != null &&
+                mime.contains("mp4")
+              ) {
                 return "m4a";
               }
 
-              if (mime.contains("png")) {
+
+              if (
+                mime != null &&
+                mime.contains("png")
+              ) {
                 return "png";
               }
 
-              if (mime.contains("webp")) {
+
+              if (
+                mime != null &&
+                mime.contains("webp")
+              ) {
                 return "webp";
               }
 
-              if (mime.contains("heic")) {
+
+              if (
+                mime != null &&
+                mime.contains("heic")
+              ) {
                 return "heic";
               }
 
-              if (mime.contains("jpeg")) {
+
+              if (
+                mime != null &&
+                mime.contains("jpeg")
+              ) {
                 return "jpg";
               }
+
 
               return "bin";
             }
 
+
+            // ========================================================
+            // RECEBER MÍDIA
+            // ========================================================
 
             private void receive(Uri uri) {
 
@@ -889,11 +1003,13 @@ jobs:
                 return;
               }
 
+
               String mime =
                 getMime(uri);
 
               String name =
                 getDisplayName(uri);
+
 
               String lowerMime =
                 mime == null
@@ -901,6 +1017,7 @@ jobs:
                   : mime.toLowerCase(
                       Locale.US
                     );
+
 
               String lowerName =
                 name == null
@@ -957,15 +1074,18 @@ jobs:
               ) {
 
                 if (input == null) {
+
                   throw new Exception(
                     "STREAM_UNAVAILABLE"
                   );
                 }
 
+
                 byte[] buffer =
                   new byte[8192];
 
                 int read;
+
 
                 while (
                   (read = input.read(buffer)) != -1
@@ -973,11 +1093,14 @@ jobs:
 
                   total += read;
 
+
                   if (total > max) {
+
                     throw new Exception(
                       "MEDIA_TOO_LARGE"
                     );
                   }
+
 
                   output.write(
                     buffer,
@@ -986,7 +1109,9 @@ jobs:
                   );
                 }
 
+
                 output.flush();
+
 
               } catch (Exception ex) {
 
@@ -994,6 +1119,7 @@ jobs:
                   temp.delete();
                 } catch (Exception ignored) {
                 }
+
 
                 notifyError(
                   uri,
@@ -1008,8 +1134,12 @@ jobs:
 
               String detected = null;
 
+
               try {
-                detected = sniff(temp);
+
+                detected =
+                  sniff(temp);
+
               } catch (Exception ignored) {
               }
 
@@ -1067,6 +1197,7 @@ jobs:
                     2
                   );
 
+
                 if (parts.length == 2) {
 
                   if (
@@ -1077,7 +1208,9 @@ jobs:
                       "application/octet-stream"
                     )
                   ) {
-                    mime = parts[1];
+
+                    mime =
+                      parts[1];
                   }
 
 
@@ -1166,7 +1299,9 @@ jobs:
                 );
 
 
-              if (!temp.renameTo(output)) {
+              if (
+                !temp.renameTo(output)
+              ) {
 
                 try (
                   FileInputStream input =
@@ -1181,6 +1316,7 @@ jobs:
 
                   int read;
 
+
                   while (
                     (read = input.read(buffer)) != -1
                   ) {
@@ -1193,12 +1329,14 @@ jobs:
                   }
                 }
 
+
                 temp.delete();
               }
 
 
               JSObject event =
                 metadata(output);
+
 
               event.put(
                 "ok",
@@ -1225,18 +1363,22 @@ jobs:
                 return;
               }
 
+
               JSObject event =
                 new JSObject();
+
 
               event.put(
                 "ok",
                 false
               );
 
+
               event.put(
                 "code",
                 code
               );
+
 
               event.put(
                 "uri",
@@ -1245,12 +1387,17 @@ jobs:
                   : uri.toString()
               );
 
+
               instance.notifyListeners(
                 "sharedMediaError",
                 event
               );
             }
 
+
+            // ========================================================
+            // WHATSAPP / ANDROID SHARE
+            // ========================================================
 
             public static void handleSharedIntent(
               Intent intent
@@ -1269,6 +1416,7 @@ jobs:
                 !Intent.ACTION_SEND.equals(action) &&
                 !Intent.ACTION_SEND_MULTIPLE.equals(action)
               ) {
+
                 return;
               }
 
@@ -1291,6 +1439,10 @@ jobs:
                   new ArrayList<>();
 
 
+                // ----------------------------------------------------
+                // CLIPDATA
+                // ----------------------------------------------------
+
                 ClipData clip =
                   intent.getClipData();
 
@@ -1306,6 +1458,7 @@ jobs:
                     Uri uri =
                       clip.getItemAt(i).getUri();
 
+
                     if (
                       uri != null &&
                       !received.contains(uri)
@@ -1317,6 +1470,10 @@ jobs:
                 }
 
 
+                // ----------------------------------------------------
+                // SEND_MULTIPLE
+                // ----------------------------------------------------
+
                 if (
                   Intent.ACTION_SEND_MULTIPLE.equals(
                     action
@@ -1327,6 +1484,7 @@ jobs:
                     intent.getParcelableArrayListExtra(
                       Intent.EXTRA_STREAM
                     );
+
 
                   if (uris != null) {
 
@@ -1342,9 +1500,15 @@ jobs:
                     }
                   }
 
+
                 } else {
 
+                  // --------------------------------------------------
+                  // SEND
+                  // --------------------------------------------------
+
                   Uri uri = null;
+
 
                   try {
 
@@ -1367,10 +1531,15 @@ jobs:
                 }
 
 
+                // ----------------------------------------------------
+                // PROCESSAR TODAS AS MÍDIAS
+                // ----------------------------------------------------
+
                 for (Uri uri : received) {
 
                   instance.receive(uri);
                 }
+
 
               } catch (Exception ex) {
 
@@ -1382,6 +1551,10 @@ jobs:
             }
 
 
+            // ========================================================
+            // CAIXA DE MÍDIAS
+            // ========================================================
+
             @PluginMethod
             public void claimInitialSync(
               PluginCall call
@@ -1390,17 +1563,21 @@ jobs:
               JSObject result =
                 new JSObject();
 
+
               result.put(
                 "claimed",
                 !initialSyncClaimed
               );
+
 
               result.put(
                 "sharedLaunch",
                 sharedLaunch
               );
 
+
               initialSyncClaimed = true;
+
 
               call.resolve(result);
             }
@@ -1413,6 +1590,7 @@ jobs:
 
               JSArray array =
                 new JSArray();
+
 
               File[] files =
                 inboxDir().listFiles();
@@ -1439,10 +1617,12 @@ jobs:
               JSObject result =
                 new JSObject();
 
+
               result.put(
                 "items",
                 array
               );
+
 
               call.resolve(result);
             }
@@ -1467,6 +1647,7 @@ jobs:
                   "id",
                   ""
                 );
+
 
               File file =
                 findById(id);
@@ -1501,6 +1682,7 @@ jobs:
 
                   int read;
 
+
                   while (
                     (read = input.read(buffer)) != -1
                   ) {
@@ -1517,6 +1699,7 @@ jobs:
                 String[] parts =
                   file.getName()
                     .split("__", -1);
+
 
                 String mime =
                   parts.length >= 2
@@ -1542,6 +1725,7 @@ jobs:
 
                 call.resolve(result);
 
+
               } catch (Exception ex) {
 
                 call.reject(
@@ -1563,11 +1747,14 @@ jobs:
                   ""
                 );
 
+
               File file =
                 findById(id);
 
+
               JSObject result =
                 new JSObject();
+
 
               result.put(
                 "ok",
@@ -1575,9 +1762,14 @@ jobs:
                 file.delete()
               );
 
+
               call.resolve(result);
             }
 
+
+            // ========================================================
+            // PERMISSÕES
+            // ========================================================
 
             @PluginMethod
             public void requestContacts(
@@ -1592,15 +1784,18 @@ jobs:
                 JSObject result =
                   new JSObject();
 
+
                 result.put(
                   "granted",
                   true
                 );
 
+
                 result.put(
                   "state",
                   "granted"
                 );
+
 
                 call.resolve(result);
 
@@ -1629,10 +1824,12 @@ jobs:
               JSObject result =
                 new JSObject();
 
+
               result.put(
                 "granted",
                 granted
               );
+
 
               result.put(
                 "state",
@@ -1640,6 +1837,7 @@ jobs:
                   ? "granted"
                   : "denied"
               );
+
 
               call.resolve(result);
             }
@@ -1658,15 +1856,18 @@ jobs:
                 JSObject result =
                   new JSObject();
 
+
                 result.put(
                   "granted",
                   true
                 );
 
+
                 result.put(
                   "state",
                   "granted"
                 );
+
 
                 call.resolve(result);
 
@@ -1695,10 +1896,12 @@ jobs:
               JSObject result =
                 new JSObject();
 
+
               result.put(
                 "granted",
                 granted
               );
+
 
               result.put(
                 "state",
@@ -1706,6 +1909,7 @@ jobs:
                   ? "granted"
                   : "denied"
               );
+
 
               call.resolve(result);
             }
@@ -1719,6 +1923,7 @@ jobs:
               JSObject result =
                 new JSObject();
 
+
               result.put(
                 "contacts",
                 getPermissionState(
@@ -1726,12 +1931,14 @@ jobs:
                 ).toString()
               );
 
+
               result.put(
                 "microphone",
                 getPermissionState(
                   "microphone"
                 ).toString()
               );
+
 
               call.resolve(result);
             }
@@ -1749,6 +1956,7 @@ jobs:
                     Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                   );
 
+
                 intent.setData(
                   Uri.parse(
                     "package:" +
@@ -1756,9 +1964,14 @@ jobs:
                   )
                 );
 
-                getActivity().startActivity(intent);
+
+                getActivity().startActivity(
+                  intent
+                );
+
 
                 call.resolve();
+
 
               } catch (Exception ex) {
 
@@ -1771,7 +1984,9 @@ jobs:
           }
           JAVA
 
-          echo "PermissionBridge criado."
+          echo "=================================================="
+          echo "PermissionBridge V120 criado."
+          echo "=================================================="
 
 
       # ============================================================
@@ -1836,7 +2051,7 @@ jobs:
 
 
       # ============================================================
-      # 16. MANIFEST
+      # 16. ANDROID MANIFEST
       # ============================================================
 
       - name: Configurar AndroidManifest
@@ -1857,6 +2072,7 @@ jobs:
               encoding="utf-8"
           )
 
+
           permissions = [
               "android.permission.READ_CONTACTS",
               "android.permission.WRITE_CONTACTS",
@@ -1864,15 +2080,19 @@ jobs:
               "android.permission.CAMERA",
           ]
 
+
           marker = "<application"
 
+
           if marker not in text:
+
               raise SystemExit(
                   "ERRO: <application> não encontrado."
               )
 
 
           additions = ""
+
 
           for permission in permissions:
 
@@ -1973,6 +2193,7 @@ jobs:
                   + text[match.end():]
               )
 
+
           else:
 
               application_end = text.find(
@@ -1999,6 +2220,7 @@ jobs:
               text,
               encoding="utf-8"
           )
+
 
           print(
               "AndroidManifest configurado com sucesso."
@@ -2031,7 +2253,7 @@ jobs:
 
 
       # ============================================================
-      # 18. CONFIGURAR VERSÃO E ASSINATURA
+      # 18. VERSÃO E ASSINATURA
       # ============================================================
 
       - name: Configurar versão V120 e assinatura
@@ -2180,6 +2402,7 @@ jobs:
               encoding="utf-8"
           )
 
+
           print(
               "build.gradle configurado."
           )
@@ -2212,48 +2435,25 @@ jobs:
 
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
 
-          echo "Validando Manifest..."
-
-
           grep -q \
             'android.permission.RECORD_AUDIO' \
-            "$MANIFEST" || {
-              echo "ERRO: RECORD_AUDIO não encontrado."
-              exit 1
-            }
-
+            "$MANIFEST"
 
           grep -q \
             'android:launchMode="singleTask"' \
-            "$MANIFEST" || {
-              echo "ERRO: singleTask não encontrado."
-              exit 1
-            }
-
+            "$MANIFEST"
 
           grep -q \
             'android.intent.action.SEND' \
-            "$MANIFEST" || {
-              echo "ERRO: SEND não encontrado."
-              exit 1
-            }
-
+            "$MANIFEST"
 
           grep -q \
             'android.intent.action.SEND_MULTIPLE' \
-            "$MANIFEST" || {
-              echo "ERRO: SEND_MULTIPLE não encontrado."
-              exit 1
-            }
-
+            "$MANIFEST"
 
           grep -q \
             'android:mimeType="audio/\*"' \
-            "$MANIFEST" || {
-              echo "ERRO: audio/* não encontrado."
-              exit 1
-            }
-
+            "$MANIFEST"
 
           echo "=================================================="
           echo "MANIFEST OK"
@@ -2264,7 +2464,7 @@ jobs:
       # 20. VALIDAR WHATSAPP
       # ============================================================
 
-      - name: Validar receptor de áudio WhatsApp
+      - name: Validar receptor WhatsApp
         shell: bash
         run: |
           set -e
@@ -2274,104 +2474,63 @@ jobs:
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
 
-          test -f "$MAIN" || {
-            echo "ERRO: MainActivity não encontrada."
-            exit 1
-          }
-
-
-          test -f "$BRIDGE" || {
-            echo "ERRO: PermissionBridge não encontrado."
-            exit 1
-          }
+          test -f "$MAIN"
+          test -f "$BRIDGE"
 
 
           grep -q \
             'handleSharedIntent' \
-            "$MAIN" || {
-              echo "ERRO: handleSharedIntent ausente."
-              exit 1
-            }
+            "$MAIN"
 
 
           grep -q \
             'getIntent' \
-            "$MAIN" || {
-              echo "ERRO: getIntent ausente."
-              exit 1
-            }
+            "$MAIN"
 
 
           grep -q \
             'onNewIntent' \
-            "$MAIN" || {
-              echo "ERRO: onNewIntent ausente."
-              exit 1
-            }
+            "$MAIN"
 
 
           grep -q \
             'ACTION_SEND_MULTIPLE' \
-            "$BRIDGE" || {
-              echo "ERRO: ACTION_SEND_MULTIPLE ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           grep -q \
             'EXTRA_STREAM' \
-            "$BRIDGE" || {
-              echo "ERRO: EXTRA_STREAM ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           grep -q \
             'getClipData' \
-            "$BRIDGE" || {
-              echo "ERRO: getClipData ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           grep -q \
             'openInputStream' \
-            "$BRIDGE" || {
-              echo "ERRO: openInputStream ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           grep -q \
             'shared-media-inbox' \
-            "$BRIDGE" || {
-              echo "ERRO: shared-media-inbox ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           grep -q \
             'sharedMedia' \
-            "$BRIDGE" || {
-              echo "ERRO: sharedMedia ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           grep -q \
             'getSharedMedia' \
-            "$BRIDGE" || {
-              echo "ERRO: getSharedMedia ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           grep -q \
             'readSharedMedia' \
-            "$BRIDGE" || {
-              echo "ERRO: readSharedMedia ausente."
-              exit 1
-            }
+            "$BRIDGE"
 
 
           echo "=================================================="
@@ -2380,7 +2539,7 @@ jobs:
 
 
       # ============================================================
-      # 21. INÍCIO DO GRADLE
+      # 21. BUILD
       # ============================================================
 
       - name: MARCADOR - INÍCIO DO GRADLE
@@ -2391,10 +2550,6 @@ jobs:
           echo " assembleRelease"
           echo "=================================================="
 
-
-      # ============================================================
-      # 22. BUILD RELEASE
-      # ============================================================
 
       - name: Gerar APK RELEASE V120
         shell: bash
@@ -2425,7 +2580,7 @@ jobs:
 
 
       # ============================================================
-      # 23. LOCALIZAR APK
+      # 22. LOCALIZAR APK
       # ============================================================
 
       - name: Localizar APK final
@@ -2437,7 +2592,6 @@ jobs:
 
 
           echo "APKs encontrados:"
-
 
           find "$PROJECT_DIR/android" \
             -type f \
@@ -2468,7 +2622,7 @@ jobs:
 
 
       # ============================================================
-      # 24. VALIDAR ASSINATURA
+      # 23. VALIDAR ASSINATURA
       # ============================================================
 
       - name: Validar assinatura do APK
@@ -2505,7 +2659,7 @@ jobs:
 
 
       # ============================================================
-      # 25. UPLOAD DO APK
+      # 24. UPLOAD DO APK
       # ============================================================
 
       - name: MARCADOR - APK PRONTO
@@ -2529,7 +2683,7 @@ jobs:
 
 
       # ============================================================
-      # 26. FINAL
+      # 25. FINAL
       # ============================================================
 
       - name: Finalizar V120
@@ -2544,7 +2698,7 @@ jobs:
 
 
       # ============================================================
-      # 27. LIMPEZA
+      # 26. LIMPEZA
       # ============================================================
 
       - name: Limpar keystore temporária
