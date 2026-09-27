@@ -1,11 +1,8 @@
-YAML CORRIGIDO — V131 GOOGLE DRIVE + BASE V120 — V4
-V4: mantém workflow_dispatch e adiciona push em main para que o GitHub processe o workflow no branch padrão após o commit. Mantém a validação de singleTask.
+YAML FINAL — V131 GOOGLE DRIVE + BASE V120
+Baseado no workflow informado como funcional. Mantém somente workflow_dispatch, sem push automático, e preserva a estrutura original.
 name: Build Android APK - V131 - GOOGLE DRIVE - BASE V120
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -1017,7 +1014,7 @@ jobs:
           done
           FINAL_MANIFEST=/tmp/final-v120-manifest.txt
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml | tee "$FINAL_MANIFEST" >/dev/null
-          grep -Eq 'launchMode.*singleTask|android:launchMode\(0x[0-9a-fA-F]+\)=0x2([[:space:]]|$)' "$FINAL_MANIFEST" || { echo "ERRO: launchMode=singleTask não encontrado no APK (nem representação textual nem 0x2 do aapt)."; exit 1; }
+          grep -Eq 'launchMode.*singleTask|android:launchMode\(0x[0-9a-fA-F]+\)=0x2([[:space:]]|$)' "$FINAL_MANIFEST" || { echo "ERRO: launchMode=singleTask não encontrado no APK."; exit 1; }
           grep -q 'audio/\*' "$FINAL_MANIFEST" || { echo "ERRO: audio/* não encontrado no APK."; exit 1; }
           grep -q 'image/\*' "$FINAL_MANIFEST" || { echo "ERRO: image/* não encontrado no APK."; exit 1; }
           grep -q '\*/\*' "$FINAL_MANIFEST" || { echo "ERRO: */* não encontrado no APK."; exit 1; }
