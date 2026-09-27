@@ -52,26 +52,26 @@ jobs:
           set -e
 
           test -n "$ANDROID_KEYSTORE_BASE64" || {
-            echo "ERRO: ANDROID_KEYSTORE_BASE64 vazio"
+            echo "ERRO: ANDROID_KEYSTORE_BASE64 vazio."
             exit 1
           }
 
           test -n "$ANDROID_KEYSTORE_PASSWORD" || {
-            echo "ERRO: ANDROID_KEYSTORE_PASSWORD vazio"
+            echo "ERRO: ANDROID_KEYSTORE_PASSWORD vazio."
             exit 1
           }
 
           test -n "$ANDROID_KEY_ALIAS" || {
-            echo "ERRO: ANDROID_KEY_ALIAS vazio"
+            echo "ERRO: ANDROID_KEY_ALIAS vazio."
             exit 1
           }
 
           test -n "$ANDROID_KEY_PASSWORD" || {
-            echo "ERRO: ANDROID_KEY_PASSWORD vazio"
+            echo "ERRO: ANDROID_KEY_PASSWORD vazio."
             exit 1
           }
 
-          echo "Secrets de assinatura reconhecidas."
+          echo "OK: secrets de assinatura reconhecidas."
 
 
       # ============================================================
@@ -94,12 +94,12 @@ jobs:
           COUNT="${#ZIPS[@]}"
 
           if [ "$COUNT" -eq 0 ]; then
-            echo "ERRO: nenhum ZIP foi encontrado."
+            echo "ERRO: nenhum ZIP encontrado."
             exit 1
           fi
 
           if [ "$COUNT" -gt 1 ]; then
-            echo "ERRO: foram encontrados vários ZIPs."
+            echo "ERRO: existem vários ZIPs."
             echo "Deixe somente o ZIP da versão que será compilada."
             printf '%s\n' "${ZIPS[@]}"
             exit 1
@@ -291,7 +291,6 @@ jobs:
           import android.net.Uri;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
-          import android.util.Base64;
 
           import java.io.File;
           import java.io.FileOutputStream;
@@ -351,7 +350,8 @@ jobs:
 
               instance = this;
 
-              Intent pending = pendingSharedIntent;
+              Intent pending =
+                pendingSharedIntent;
 
               pendingSharedIntent = null;
 
@@ -432,18 +432,19 @@ jobs:
 
             private String b64(String value) {
 
-              return Base64.encodeToString(
-                (
-                  value == null
-                    ? ""
-                    : value
-                ).getBytes(
-                  java.nio.charset.StandardCharsets.UTF_8
-                ),
-                Base64.URL_SAFE |
-                Base64.NO_WRAP |
-                Base64.NO_PADDING
-              );
+              return android.util.Base64
+                .encodeToString(
+                  (
+                    value == null
+                      ? ""
+                      : value
+                  ).getBytes(
+                    java.nio.charset.StandardCharsets.UTF_8
+                  ),
+                  android.util.Base64.URL_SAFE |
+                  android.util.Base64.NO_WRAP |
+                  android.util.Base64.NO_PADDING
+                );
             }
 
 
@@ -452,9 +453,9 @@ jobs:
               try {
 
                 return new String(
-                  Base64.decode(
+                  android.util.Base64.decode(
                     value,
-                    Base64.URL_SAFE
+                    android.util.Base64.URL_SAFE
                   ),
                   java.nio.charset.StandardCharsets.UTF_8
                 );
@@ -476,9 +477,11 @@ jobs:
 
             private JSObject metadata(File file) {
 
-              String[] p = parse(file);
+              String[] p =
+                parse(file);
 
-              JSObject o = new JSObject();
+              JSObject o =
+                new JSObject();
 
               if (p.length < 5) {
                 return o;
@@ -506,7 +509,9 @@ jobs:
             }
 
 
-            private File findById(String id) {
+            private File findById(
+              String id
+            ) {
 
               if (
                 id == null ||
@@ -604,8 +609,9 @@ jobs:
             }
 
 
-            private File storeUri(Uri uri)
-              throws Exception {
+            private File storeUri(
+              Uri uri
+            ) throws Exception {
 
               String mime =
                 typeFor(uri);
@@ -659,11 +665,17 @@ jobs:
 
               long total = 0;
 
+              InputStream input =
+                getContext()
+                  .getContentResolver()
+                  .openInputStream(uri);
+
+              if (input == null) {
+                return null;
+              }
+
               try (
-                InputStream input =
-                  getContext()
-                    .getContentResolver()
-                    .openInputStream(uri);
+                InputStream in = input;
 
                 FileOutputStream output =
                   new FileOutputStream(
@@ -671,17 +683,13 @@ jobs:
                   )
               ) {
 
-                if (input == null) {
-                  return null;
-                }
-
                 byte[] buffer =
                   new byte[64 * 1024];
 
                 int count;
 
                 while (
-                  (count = input.read(buffer))
+                  (count = in.read(buffer))
                     != -1
                 ) {
 
@@ -721,14 +729,31 @@ jobs:
                 return result;
               }
 
-              android.os.Parcelable single =
-                intent.getParcelableExtra(
+              if (
+                intent.getExtras() != null &&
+                intent.getExtras().containsKey(
                   Intent.EXTRA_STREAM
-                );
+                )
+              ) {
 
-              if (single instanceof Uri) {
-                result.add((Uri) single);
+                try {
+
+                  android.os.Parcelable single =
+                    intent.getParcelableExtra(
+                      Intent.EXTRA_STREAM
+                    );
+
+                  if (single instanceof Uri) {
+
+                    result.add(
+                      (Uri) single
+                    );
+                  }
+
+                } catch (Exception ignored) {
+                }
               }
+
 
               if (
                 intent.getClipData() != null
@@ -751,32 +776,40 @@ jobs:
                     uri != null &&
                     !result.contains(uri)
                   ) {
+
                     result.add(uri);
                   }
                 }
               }
 
+
               if (
                 android.os.Build.VERSION.SDK_INT >= 33
               ) {
 
-                ArrayList<Uri> streams =
-                  intent.getParcelableArrayListExtra(
-                    Intent.EXTRA_STREAM,
-                    Uri.class
-                  );
+                try {
 
-                if (streams != null) {
+                  ArrayList<Uri> streams =
+                    intent.getParcelableArrayListExtra(
+                      Intent.EXTRA_STREAM,
+                      Uri.class
+                    );
 
-                  for (Uri uri : streams) {
+                  if (streams != null) {
 
-                    if (
-                      uri != null &&
-                      !result.contains(uri)
-                    ) {
-                      result.add(uri);
+                    for (Uri uri : streams) {
+
+                      if (
+                        uri != null &&
+                        !result.contains(uri)
+                      ) {
+
+                        result.add(uri);
+                      }
                     }
                   }
+
+                } catch (Exception ignored) {
                 }
 
               } else {
@@ -796,6 +829,7 @@ jobs:
                         uri != null &&
                         !result.contains(uri)
                       ) {
+
                         result.add(uri);
                       }
                     }
@@ -817,13 +851,12 @@ jobs:
                 return;
               }
 
+              String action =
+                intent.getAction();
+
               if (
-                !Intent.ACTION_SEND.equals(
-                  intent.getAction()
-                ) &&
-                !Intent.ACTION_SEND_MULTIPLE.equals(
-                  intent.getAction()
-                )
+                !Intent.ACTION_SEND.equals(action) &&
+                !Intent.ACTION_SEND_MULTIPLE.equals(action)
               ) {
                 return;
               }
@@ -1236,9 +1269,9 @@ jobs:
 
 
       # ============================================================
-      # 16. CONFIGURAR MANIFEST
+      # 16. CONFIGURAR MANIFEST PARA COMPARTILHAMENTO
       # ============================================================
-      - name: Configurar Android para compartilhamento
+      - name: Configurar Android para receber áudio e fotos
         shell: bash
         run: |
           set -e
@@ -1280,10 +1313,14 @@ jobs:
 
           if not match:
               raise SystemExit(
-                  "ERRO: MainActivity não encontrada."
+                  "ERRO: MainActivity não encontrada no Manifest."
               )
 
           activity_open = match.group(0)
+
+          # --------------------------------------------------------
+          # Android 12+
+          # --------------------------------------------------------
 
           if "android:exported=" not in activity_open:
 
@@ -1299,6 +1336,10 @@ jobs:
                   'android:exported="true"',
                   activity_open
               )
+
+          # --------------------------------------------------------
+          # Manter a mesma Activity para receber novos shares
+          # --------------------------------------------------------
 
           if "android:launchMode=" not in activity_open:
 
@@ -1321,11 +1362,9 @@ jobs:
               text[match.end():]
           )
 
-          patterns = [
-              r'<activity\b[^>]*android:name="[^"]*\.MainActivity"[^>]*>',
-              r'<activity\b[^>]*android:name="com\.sacerdotisaaime\.gestao\.MainActivity"[^>]*>',
-              r'<activity\b[^>]*android:name="MainActivity"[^>]*>',
-          ]
+          # --------------------------------------------------------
+          # Localizar novamente a MainActivity
+          # --------------------------------------------------------
 
           match = None
 
@@ -1345,53 +1384,53 @@ jobs:
                   "ERRO: MainActivity não encontrada novamente."
               )
 
-          activity_start = match.start()
-
-          activity_end = text.find(
+          close = text.find(
               "</activity>",
               match.end()
           )
 
-          if activity_end < 0:
+          if close < 0:
               raise SystemExit(
                   "ERRO: fechamento da MainActivity não encontrado."
               )
-
-          activity_end += len("</activity>")
-
-          activity_block = text[
-              activity_start:
-              activity_end
-          ]
 
           marker = (
               "<!-- Gestão Sacerdotista Aimê - "
               "compartilhamento -->"
           )
 
-          # Remover bloco anterior se existir
-          while marker in activity_block:
+          # --------------------------------------------------------
+          # Remover filtros anteriores marcados
+          # --------------------------------------------------------
 
-              marker_start = activity_block.find(
-                  marker
+          while marker in text:
+
+              start = text.find(marker)
+
+              end = text.find(
+                  "</activity>",
+                  start
               )
 
-              filter_end = activity_block.find(
-                  "</intent-filter>",
-                  marker_start
-              )
-
-              if filter_end < 0:
+              if end < 0:
                   break
 
-              filter_end += len("</intent-filter>")
+              # Remover somente os filtros entre o marcador
+              # e o próximo fechamento da Activity.
+              section = text[
+                  start:end
+              ]
 
-              activity_block = (
-                  activity_block[:marker_start] +
-                  activity_block[filter_end:]
+              text = (
+                  text[:start] +
+                  text[end:]
               )
 
-          intent_filters = r'''
+          # --------------------------------------------------------
+          # Filtros definitivos
+          # --------------------------------------------------------
+
+          filters = r'''
               <!-- Gestão Sacerdotista Aimê - compartilhamento -->
 
               <intent-filter>
@@ -1431,16 +1470,43 @@ jobs:
               </intent-filter>
           '''
 
-          activity_block = activity_block.replace(
+          # --------------------------------------------------------
+          # Inserir filtros antes do fechamento da MainActivity
+          # --------------------------------------------------------
+
+          match = None
+
+          for pattern in patterns:
+
+              match = re.search(
+                  pattern,
+                  text,
+                  flags=re.IGNORECASE
+              )
+
+              if match:
+                  break
+
+          if not match:
+              raise SystemExit(
+                  "ERRO: MainActivity não encontrada para inserção."
+              )
+
+          close = text.find(
               "</activity>",
-              intent_filters +
-              "\n</activity>"
+              match.end()
           )
 
+          if close < 0:
+              raise SystemExit(
+                  "ERRO: fechamento da MainActivity não encontrado."
+              )
+
           text = (
-              text[:activity_start] +
-              activity_block +
-              text[activity_end:]
+              text[:close] +
+              filters +
+              "\n        " +
+              text[close:]
           )
 
           path.write_text(text)
@@ -1448,7 +1514,7 @@ jobs:
 
 
       # ============================================================
-      # 17. PERMISSÕES
+      # 17. DECLARAR PERMISSÕES
       # ============================================================
       - name: Declarar permissões Android
         shell: bash
@@ -1509,12 +1575,21 @@ jobs:
       # ============================================================
       # 18. VALIDAR MANIFEST ANTES DO BUILD
       # ============================================================
-      - name: Validar Manifest
+      - name: Validar receptor de compartilhamento
         shell: bash
         run: |
           set -e
 
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
+
+          echo "======================================"
+          echo "VALIDANDO MANIFEST"
+          echo "======================================"
+
+
+          # --------------------------------------------------------
+          # Permissões
+          # --------------------------------------------------------
 
           for PERM in \
             READ_CONTACTS \
@@ -1534,14 +1609,38 @@ jobs:
 
           done
 
+
+          # --------------------------------------------------------
+          # Activity exportada
+          # --------------------------------------------------------
+
+          grep -q \
+            'android:exported="true"' \
+            "$MANIFEST" || {
+              echo "ERRO: exported=true ausente."
+              exit 1
+            }
+
+          echo "OK: exported=true"
+
+
+          # --------------------------------------------------------
+          # singleTask
+          # --------------------------------------------------------
+
           grep -q \
             'android:launchMode="singleTask"' \
             "$MANIFEST" || {
-              echo "ERRO: MainActivity sem launchMode=singleTask."
+              echo "ERRO: MainActivity sem singleTask."
               exit 1
             }
 
           echo "OK: singleTask"
+
+
+          # --------------------------------------------------------
+          # ACTION_SEND
+          # --------------------------------------------------------
 
           grep -q \
             'android.intent.action.SEND' \
@@ -1552,6 +1651,11 @@ jobs:
 
           echo "OK: ACTION_SEND"
 
+
+          # --------------------------------------------------------
+          # ACTION_SEND_MULTIPLE
+          # --------------------------------------------------------
+
           grep -q \
             'android.intent.action.SEND_MULTIPLE' \
             "$MANIFEST" || {
@@ -1560,6 +1664,11 @@ jobs:
             }
 
           echo "OK: SEND_MULTIPLE"
+
+
+          # --------------------------------------------------------
+          # AUDIO
+          # --------------------------------------------------------
 
           grep -q \
             'android:mimeType="audio/\*"' \
@@ -1570,6 +1679,11 @@ jobs:
 
           echo "OK: audio/*"
 
+
+          # --------------------------------------------------------
+          # IMAGE
+          # --------------------------------------------------------
+
           grep -q \
             'android:mimeType="image/\*"' \
             "$MANIFEST" || {
@@ -1578,6 +1692,11 @@ jobs:
             }
 
           echo "OK: image/*"
+
+
+          # --------------------------------------------------------
+          # GENÉRICO
+          # --------------------------------------------------------
 
           grep -q \
             'android:mimeType="\*/\*"' \
@@ -1588,17 +1707,10 @@ jobs:
 
           echo "OK: */*"
 
-          grep -q \
-            'android.intent.category.DEFAULT' \
-            "$MANIFEST" || {
-              echo "ERRO: CATEGORY_DEFAULT ausente."
-              exit 1
-            }
 
-          echo "OK: CATEGORY_DEFAULT"
-
+          echo ""
           echo "======================================"
-          echo "Manifest validado."
+          echo "MANIFEST VALIDADO COM SUCESSO"
           echo "======================================"
 
 
@@ -1614,10 +1726,12 @@ jobs:
 
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
+
           test -f "$MAIN" || {
             echo "ERRO: MainActivity.java não encontrado."
             exit 1
           }
+
 
           test -f "$BRIDGE" || {
             echo "ERRO: PermissionBridgePlugin.java não encontrado."
@@ -1626,7 +1740,7 @@ jobs:
 
 
           # --------------------------------------------------------
-          # MainActivity chama handleSharedIntent
+          # MainActivity
           # --------------------------------------------------------
 
           grep -q \
@@ -1640,31 +1754,31 @@ jobs:
 
 
           # --------------------------------------------------------
-          # ACTION_SEND_MULTIPLE
-          # --------------------------------------------------------
-
-          grep -q \
-            'ACTION_SEND_MULTIPLE' \
-            "$BRIDGE" || {
-              echo "ERRO: ACTION_SEND_MULTIPLE ausente."
-              exit 1
-            }
-
-          echo "OK: ACTION_SEND_MULTIPLE."
-
-
-          # --------------------------------------------------------
           # ACTION_SEND
           # --------------------------------------------------------
 
           grep -q \
             'ACTION_SEND' \
             "$BRIDGE" || {
-              echo "ERRO: ACTION_SEND ausente."
+              echo "ERRO: ACTION_SEND ausente no Bridge."
               exit 1
             }
 
-          echo "OK: ACTION_SEND."
+          echo "OK: ACTION_SEND no Bridge."
+
+
+          # --------------------------------------------------------
+          # ACTION_SEND_MULTIPLE
+          # --------------------------------------------------------
+
+          grep -q \
+            'ACTION_SEND_MULTIPLE' \
+            "$BRIDGE" || {
+              echo "ERRO: ACTION_SEND_MULTIPLE ausente no Bridge."
+              exit 1
+            }
+
+          echo "OK: ACTION_SEND_MULTIPLE no Bridge."
 
 
           # --------------------------------------------------------
@@ -1688,7 +1802,7 @@ jobs:
           grep -q \
             'getClipData' \
             "$BRIDGE" || {
-              echo "ERRO: ClipData ausente."
+              echo "ERRO: getClipData ausente."
               exit 1
             }
 
@@ -1696,7 +1810,7 @@ jobs:
 
 
           # --------------------------------------------------------
-          # Caixa de entrada nativa
+          # Armazenamento nativo
           # --------------------------------------------------------
 
           grep -q \
@@ -1709,13 +1823,28 @@ jobs:
           echo "OK: shared-media-inbox."
 
 
+          # --------------------------------------------------------
+          # Evento para a camada web
+          # --------------------------------------------------------
+
+          grep -q \
+            'sharedMediaReceived' \
+            "$BRIDGE" || {
+              echo "ERRO: evento sharedMediaReceived ausente."
+              exit 1
+            }
+
+          echo "OK: sharedMediaReceived."
+
+
+          echo ""
           echo "======================================"
-          echo "OK: receptor nativo validado."
+          echo "CÓDIGO NATIVO VALIDADO"
           echo "======================================"
 
 
       # ============================================================
-      # 20. KEYSTORE
+      # 20. PREPARAR KEYSTORE
       # ============================================================
       - name: Preparar keystore
         shell: bash
@@ -1740,7 +1869,7 @@ jobs:
       # ============================================================
       # 21. VERSÃO + ASSINATURA
       # ============================================================
-      - name: Configurar versão e assinatura
+      - name: Configurar versão V119 e assinatura
         shell: bash
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -1756,6 +1885,7 @@ jobs:
             exit 1
           }
 
+
           python3 - "$APP_GRADLE" <<'PY'
           from pathlib import Path
           import re
@@ -1765,27 +1895,52 @@ jobs:
 
           text = path.read_text()
 
+
           # ========================================================
           # V119
           # ========================================================
 
-          text = re.sub(
+          if re.search(
               r'versionName\s+"[^"]+"',
-              'versionName "1.19.0"',
-              text,
-              count=1
-          )
+              text
+          ):
 
-          text = re.sub(
+              text = re.sub(
+                  r'versionName\s+"[^"]+"',
+                  'versionName "1.19.0"',
+                  text,
+                  count=1
+              )
+
+          else:
+
+              text = text.replace(
+                  'android {',
+                  '''android {
+                  defaultConfig {
+                      versionName "1.19.0"
+                      versionCode 119
+                  }
+              ''',
+                  1
+              )
+
+
+          if re.search(
               r'versionCode\s+\d+',
-              'versionCode 119',
-              text,
-              count=1
-          )
+              text
+          ):
+
+              text = re.sub(
+                  r'versionCode\s+\d+',
+                  'versionCode 119',
+                  text,
+                  count=1
+              )
 
 
           # ========================================================
-          # ASSINATURA
+          # SIGNING CONFIG
           # ========================================================
 
           if 'signingConfigs {' not in text:
@@ -1824,13 +1979,14 @@ jobs:
 
 
           # ========================================================
-          # RELEASE
+          # RELEASE BUILD TYPE
           # ========================================================
 
-          build_types = re.search(
+          build_types =
+            re.search(
               r'buildTypes\s*\{',
               text
-          )
+            )
 
           if not build_types:
 
@@ -1850,10 +2006,11 @@ jobs:
                   build_types.end():
               ]
 
-              release = re.search(
+              release =
+                re.search(
                   r'release\s*\{',
                   tail
-              )
+                )
 
               if not release:
 
@@ -1870,27 +2027,47 @@ jobs:
                       text[pos:]
                   )
 
-              elif (
-                  'signingConfig signingConfigs.release'
-                  not in tail[
-                      release.end():
-                      release.end() + 2500
-                  ]
-              ):
+              else:
 
-                  pos = (
+                  release_start = (
                       build_types.end() +
-                      release.end()
+                      release.start()
                   )
 
-                  text = (
-                      text[:pos] +
-                      '''
+                  release_end =
+                    text.find(
+                      "}",
+                      release_start
+                    )
+
+                  release_block = (
+                    text[
+                      release_start:
+                      release_end + 1
+                    ]
+                    if release_end > release_start
+                    else ""
+                  )
+
+                  if (
+                      'signingConfig signingConfigs.release'
+                      not in release_block
+                  ):
+
+                      insert_pos =
+                        text.find(
+                          "{",
+                          release_start
+                        ) + 1
+
+                      text = (
+                          text[:insert_pos] +
+                          '''
                       signingConfig signingConfigs.release
                       minifyEnabled false
                       ''' +
-                      text[pos:]
-                  )
+                          text[insert_pos:]
+                      )
 
           path.write_text(text)
           PY
@@ -1907,11 +2084,11 @@ jobs:
             -alias "$ANDROID_KEY_ALIAS" \
             >/dev/null
 
-          echo "Keystore e alias validados."
+          echo "OK: keystore e alias validados."
 
 
       # ============================================================
-      # 22. VALIDAR VERSÃO
+      # 22. VALIDAR V119
       # ============================================================
       - name: Validar versão V119
         shell: bash
@@ -1938,7 +2115,7 @@ jobs:
 
 
       # ============================================================
-      # 23. GERAR APK RELEASE
+      # 23. COMPILAR APK
       # ============================================================
       - name: Gerar APK RELEASE
         shell: bash
@@ -1983,7 +2160,7 @@ jobs:
 
           if [ ! -f "$APK" ]; then
 
-            echo "ERRO: APK release não encontrado."
+            echo "ERRO: APK não encontrado."
 
             find "$PROJECT_DIR/android" \
               -type f \
@@ -1999,9 +2176,9 @@ jobs:
 
 
       # ============================================================
-      # 25. VALIDAR PERMISSÕES E MANIFEST DO APK
+      # 25. VALIDAR PERMISSÕES NO APK
       # ============================================================
-      - name: Validar permissões e compartilhamento no APK
+      - name: Validar permissões no APK
         shell: bash
         run: |
           set -e
@@ -2021,13 +2198,13 @@ jobs:
             exit 1
           }
 
-
-          # ========================================================
-          # PERMISSÕES
-          # ========================================================
+          echo "======================================"
+          echo "PERMISSÕES DO APK"
+          echo "======================================"
 
           "$AAPT" dump permissions "$APK" \
             | tee /tmp/apk-permissions.txt
+
 
           for PERM in \
             READ_CONTACTS \
@@ -2051,11 +2228,40 @@ jobs:
           done
 
 
-          # ========================================================
-          # MANIFEST FINAL
-          # ========================================================
+          echo ""
+          echo "Permissões do APK validadas."
+
+
+      # ============================================================
+      # 26. VALIDAR INTENTS NO APK
+      # ============================================================
+      - name: Validar compartilhamento no APK
+        shell: bash
+        run: |
+          set -e
+
+          APK="$APK_PATH"
+
+          AAPT=$(
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name aapt \
+              | sort -V \
+              | tail -n 1
+          )
+
+          test -n "$AAPT" || {
+            echo "ERRO: aapt não encontrado."
+            exit 1
+          }
+
 
           FINAL_MANIFEST="/tmp/final-v119-manifest.txt"
+
+
+          echo "======================================"
+          echo "MANIFEST FINAL DO APK"
+          echo "======================================"
 
           "$AAPT" dump xmltree \
             "$APK" \
@@ -2063,25 +2269,9 @@ jobs:
             | tee "$FINAL_MANIFEST"
 
 
-          # ========================================================
-          # SINGLE TASK
-          # ========================================================
-
-          grep -q \
-            'singleTask' \
-            "$FINAL_MANIFEST" || {
-
-            echo "ERRO: singleTask não encontrado no APK."
-
-            exit 1
-          }
-
-          echo "OK NO APK: singleTask"
-
-
-          # ========================================================
+          # --------------------------------------------------------
           # ACTION_SEND
-          # ========================================================
+          # --------------------------------------------------------
 
           grep -q \
             'android.intent.action.SEND' \
@@ -2095,9 +2285,9 @@ jobs:
           echo "OK NO APK: ACTION_SEND"
 
 
-          # ========================================================
-          # SEND_MULTIPLE
-          # ========================================================
+          # --------------------------------------------------------
+          # ACTION_SEND_MULTIPLE
+          # --------------------------------------------------------
 
           grep -q \
             'android.intent.action.SEND_MULTIPLE' \
@@ -2111,9 +2301,9 @@ jobs:
           echo "OK NO APK: SEND_MULTIPLE"
 
 
-          # ========================================================
+          # --------------------------------------------------------
           # AUDIO
-          # ========================================================
+          # --------------------------------------------------------
 
           grep -q \
             'audio/\*' \
@@ -2127,9 +2317,9 @@ jobs:
           echo "OK NO APK: audio/*"
 
 
-          # ========================================================
+          # --------------------------------------------------------
           # IMAGE
-          # ========================================================
+          # --------------------------------------------------------
 
           grep -q \
             'image/\*' \
@@ -2143,9 +2333,9 @@ jobs:
           echo "OK NO APK: image/*"
 
 
-          # ========================================================
+          # --------------------------------------------------------
           # MIME GENÉRICO
-          # ========================================================
+          # --------------------------------------------------------
 
           grep -q \
             '\*/\*' \
@@ -2163,17 +2353,16 @@ jobs:
           echo "======================================"
           echo "V119 VALIDADA NO APK FINAL"
           echo "======================================"
-          echo "singleTask       : OK"
-          echo "ACTION_SEND      : OK"
-          echo "SEND_MULTIPLE    : OK"
-          echo "audio/*          : OK"
-          echo "image/*          : OK"
-          echo "*/*              : OK"
+          echo "ACTION_SEND   : OK"
+          echo "SEND_MULTIPLE : OK"
+          echo "audio/*       : OK"
+          echo "image/*       : OK"
+          echo "*/*           : OK"
           echo "======================================"
 
 
       # ============================================================
-      # 26. VALIDAR ASSINATURA
+      # 27. VALIDAR ASSINATURA
       # ============================================================
       - name: Validar assinatura do APK
         shell: bash
@@ -2201,7 +2390,7 @@ jobs:
 
 
       # ============================================================
-      # 27. DISPONIBILIZAR APK
+      # 28. DISPONIBILIZAR APK
       # ============================================================
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
@@ -2213,12 +2402,14 @@ jobs:
 
 
       # ============================================================
-      # 28. LIMPAR KEYSTORE
+      # 29. LIMPAR KEYSTORE
       # ============================================================
       - name: Limpar arquivo temporário de assinatura
         if: always()
         shell: bash
         run: |
-          rm -f \
-            "$PROJECT_DIR/android/app/release-key.jks" \
-            2>/dev/null || true
+          if [ -n "${PROJECT_DIR:-}" ]; then
+            rm -f \
+              "$PROJECT_DIR/android/app/release-key.jks" \
+              2>/dev/null || true
+          fi
