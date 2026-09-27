@@ -2130,12 +2130,14 @@ jobs:
             AndroidManifest.xml |
             tee "$FINAL_MANIFEST" >/dev/null
 
-          grep -q \
-            'launchMode.*singleTask' \
-            "$FINAL_MANIFEST" || {
-              echo "ERRO: launchMode=singleTask não encontrado no APK."
-              exit 1
-            }
+          if grep -Eq \
+            'launchMode.*(singleTask|0x2)' \
+            "$FINAL_MANIFEST"; then
+            echo "OK NO APK: launchMode=singleTask"
+          else
+            echo "ERRO: launchMode=singleTask não encontrado no APK."
+            exit 1
+          fi
 
           grep -q \
             'audio/\*' \
