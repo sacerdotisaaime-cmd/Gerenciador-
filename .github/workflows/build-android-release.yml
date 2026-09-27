@@ -1040,7 +1040,7 @@ jobs:
           done
           FINAL_MANIFEST=/tmp/final-v120-manifest.txt
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml | tee "$FINAL_MANIFEST" >/dev/null
-          grep -Eq 'launchMode.*singleTask|android:launchMode\(0x[0-9a-fA-F]+\)=0x2([[:space:]]|$)' "$FINAL_MANIFEST" || { echo "ERRO: launchMode=singleTask não encontrado no APK."; exit 1; }
+          grep -Eq 'android:launchMode\(.*\).*0x2([[:space:]]|$)' "$FINAL_MANIFEST" || { echo "ERRO: launchMode=singleTask não encontrado no APK."; exit 1; }
           grep -q 'audio/\*' "$FINAL_MANIFEST" || { echo "ERRO: audio/* não encontrado no APK."; exit 1; }
           grep -q 'image/\*' "$FINAL_MANIFEST" || { echo "ERRO: image/* não encontrado no APK."; exit 1; }
           grep -q '\*/\*' "$FINAL_MANIFEST" || { echo "ERRO: */* não encontrado no APK."; exit 1; }
