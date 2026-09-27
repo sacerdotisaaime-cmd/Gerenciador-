@@ -1,3 +1,6 @@
+YAML CORRIGIDO — V131 GOOGLE DRIVE + BASE V120
+Correção V3: validação do launchMode no APK usando a representação numérica do aapt (singleTask = 0x2).
+
 name: Build Android APK - V131 - GOOGLE DRIVE - BASE V120
 
 on:
@@ -1012,14 +1015,14 @@ jobs:
           done
           FINAL_MANIFEST=/tmp/final-v120-manifest.txt
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml | tee "$FINAL_MANIFEST" >/dev/null
-          grep -q 'launchMode.*singleTask' "$FINAL_MANIFEST" || { echo "ERRO: launchMode=singleTask não encontrado no APK."; exit 1; }
+          grep -Eq 'android:launchMode\(0x[0-9a-fA-F]+\)=0x2([[:space:]]|$)' "$FINAL_MANIFEST" || { echo "ERRO: launchMode=singleTask (valor 0x2) não encontrado no APK."; exit 1; }
           grep -q 'audio/\*' "$FINAL_MANIFEST" || { echo "ERRO: audio/* não encontrado no APK."; exit 1; }
           grep -q 'image/\*' "$FINAL_MANIFEST" || { echo "ERRO: image/* não encontrado no APK."; exit 1; }
           grep -q '\*/\*' "$FINAL_MANIFEST" || { echo "ERRO: */* não encontrado no APK."; exit 1; }
           grep -q 'android.intent.action.SEND' "$FINAL_MANIFEST" || { echo "ERRO: ACTION_SEND não encontrado no APK."; exit 1; }
           grep -q 'android.intent.action.SEND_MULTIPLE' "$FINAL_MANIFEST" || { echo "ERRO: ACTION_SEND_MULTIPLE não encontrado no APK."; exit 1; }
           grep -q 'grantUriPermissions' "$FINAL_MANIFEST" || { echo "ERRO: grantUriPermissions não encontrado no APK."; exit 1; }
-          echo "OK NO APK: singleTask + grantUriPermissions + SEND + SEND_MULTIPLE + áudio + foto + MIME genérico"
+          echo "OK NO APK: singleTask (0x2) + grantUriPermissions + SEND + SEND_MULTIPLE + áudio + foto + MIME genérico"
 
       - name: Validar assinatura do APK
         shell: bash
@@ -1043,3 +1046,5 @@ jobs:
         shell: bash
         run: |
           rm -f "$PROJECT_DIR/android/app/release-key.jks" 2>/dev/null || true
+
+
