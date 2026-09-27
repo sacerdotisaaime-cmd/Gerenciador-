@@ -288,14 +288,12 @@ jobs:
 
           import android.Manifest;
           import android.content.Intent;
-          import android.content.SharedPreferences;
           import android.net.Uri;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
           import android.util.Base64;
 
           import java.io.File;
-          import java.io.FileInputStream;
           import java.io.FileOutputStream;
           import java.io.InputStream;
           import java.util.ArrayList;
@@ -1348,6 +1346,7 @@ jobs:
               )
 
           activity_start = match.start()
+
           activity_end = text.find(
               "</activity>",
               match.end()
@@ -1370,15 +1369,26 @@ jobs:
               "compartilhamento -->"
           )
 
-          if marker in activity_block:
+          # Remover bloco anterior se existir
+          while marker in activity_block:
 
-              activity_block = re.sub(
-                  r'\s*<!-- Gestão Sacerdotista Aimê - '
-                  r'compartilhamento -->.*?'
-                  r'</intent-filter>',
-                  '',
-                  activity_block,
-                  flags=re.DOTALL
+              marker_start = activity_block.find(
+                  marker
+              )
+
+              filter_end = activity_block.find(
+                  "</intent-filter>",
+                  marker_start
+              )
+
+              if filter_end < 0:
+                  break
+
+              filter_end += len("</intent-filter>")
+
+              activity_block = (
+                  activity_block[:marker_start] +
+                  activity_block[filter_end:]
               )
 
           intent_filters = r'''
@@ -1421,12 +1431,10 @@ jobs:
               </intent-filter>
           '''
 
-          activity_block = (
-              activity_block.replace(
-                  "</activity>",
-                  intent_filters +
-                  "\n</activity>"
-              )
+          activity_block = activity_block.replace(
+              "</activity>",
+              intent_filters +
+              "\n</activity>"
           )
 
           text = (
@@ -1499,7 +1507,7 @@ jobs:
 
 
       # ============================================================
-      # 18. VALIDAR MANIFEST
+      # 18. VALIDAR MANIFEST ANTES DO BUILD
       # ============================================================
       - name: Validar Manifest
         shell: bash
@@ -1542,6 +1550,8 @@ jobs:
               exit 1
             }
 
+          echo "OK: ACTION_SEND"
+
           grep -q \
             'android.intent.action.SEND_MULTIPLE' \
             "$MANIFEST" || {
@@ -1549,12 +1559,7 @@ jobs:
               exit 1
             }
 
-          grep -q \
-            'android:mimeType="image/\*"' \
-            "$MANIFEST" || {
-              echo "ERRO: image/* ausente."
-              exit 1
-            }
+          echo "OK: SEND_MULTIPLE"
 
           grep -q \
             'android:mimeType="audio/\*"' \
@@ -1563,6 +1568,17 @@ jobs:
               exit 1
             }
 
+          echo "OK: audio/*"
+
+          grep -q \
+            'android:mimeType="image/\*"' \
+            "$MANIFEST" || {
+              echo "ERRO: image/* ausente."
+              exit 1
+            }
+
+          echo "OK: image/*"
+
           grep -q \
             'android:mimeType="\*/\*"' \
             "$MANIFEST" || {
@@ -1570,7 +1586,20 @@ jobs:
               exit 1
             }
 
-          echo "OK: filtros de compartilhamento."
+          echo "OK: */*"
+
+          grep -q \
+            'android.intent.category.DEFAULT' \
+            "$MANIFEST" || {
+              echo "ERRO: CATEGORY_DEFAULT ausente."
+              exit 1
+            }
+
+          echo "OK: CATEGORY_DEFAULT"
+
+          echo "======================================"
+          echo "Manifest validado."
+          echo "======================================"
 
 
       # ============================================================
@@ -1585,19 +1614,62 @@ jobs:
 
           BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
 
+          test -f "$MAIN" || {
+            echo "ERRO: MainActivity.java não encontrado."
+            exit 1
+          }
+
+          test -f "$BRIDGE" || {
+            echo "ERRO: PermissionBridgePlugin.java não encontrado."
+            exit 1
+          }
+
+
+          # --------------------------------------------------------
+          # MainActivity chama handleSharedIntent
+          # --------------------------------------------------------
+
           grep -q \
-            'PermissionBridgePlugin.*handleSharedIntent' \
+            'handleSharedIntent' \
             "$MAIN" || {
               echo "ERRO: MainActivity não chama handleSharedIntent."
               exit 1
             }
 
+          echo "OK: MainActivity chama handleSharedIntent."
+
+
+          # --------------------------------------------------------
+          # ACTION_SEND_MULTIPLE
+          # --------------------------------------------------------
+
           grep -q \
             'ACTION_SEND_MULTIPLE' \
             "$BRIDGE" || {
-              echo "ERRO: SEND_MULTIPLE ausente."
+              echo "ERRO: ACTION_SEND_MULTIPLE ausente."
               exit 1
             }
+
+          echo "OK: ACTION_SEND_MULTIPLE."
+
+
+          # --------------------------------------------------------
+          # ACTION_SEND
+          # --------------------------------------------------------
+
+          grep -q \
+            'ACTION_SEND' \
+            "$BRIDGE" || {
+              echo "ERRO: ACTION_SEND ausente."
+              exit 1
+            }
+
+          echo "OK: ACTION_SEND."
+
+
+          # --------------------------------------------------------
+          # EXTRA_STREAM
+          # --------------------------------------------------------
 
           grep -q \
             'EXTRA_STREAM' \
@@ -1606,6 +1678,13 @@ jobs:
               exit 1
             }
 
+          echo "OK: EXTRA_STREAM."
+
+
+          # --------------------------------------------------------
+          # ClipData
+          # --------------------------------------------------------
+
           grep -q \
             'getClipData' \
             "$BRIDGE" || {
@@ -1613,7 +1692,26 @@ jobs:
               exit 1
             }
 
+          echo "OK: ClipData."
+
+
+          # --------------------------------------------------------
+          # Caixa de entrada nativa
+          # --------------------------------------------------------
+
+          grep -q \
+            'shared-media-inbox' \
+            "$BRIDGE" || {
+              echo "ERRO: shared-media-inbox ausente."
+              exit 1
+            }
+
+          echo "OK: shared-media-inbox."
+
+
+          echo "======================================"
           echo "OK: receptor nativo validado."
+          echo "======================================"
 
 
       # ============================================================
@@ -1667,6 +1765,10 @@ jobs:
 
           text = path.read_text()
 
+          # ========================================================
+          # V119
+          # ========================================================
+
           text = re.sub(
               r'versionName\s+"[^"]+"',
               'versionName "1.19.0"',
@@ -1680,6 +1782,11 @@ jobs:
               text,
               count=1
           )
+
+
+          # ========================================================
+          # ASSINATURA
+          # ========================================================
 
           if 'signingConfigs {' not in text:
 
@@ -1714,6 +1821,11 @@ jobs:
               ''',
                   1
               )
+
+
+          # ========================================================
+          # RELEASE
+          # ========================================================
 
           build_types = re.search(
               r'buildTypes\s*\{',
@@ -1784,6 +1896,10 @@ jobs:
           PY
 
 
+          # ========================================================
+          # VALIDAR KEYSTORE
+          # ========================================================
+
           keytool -list \
             -keystore \
             "$PROJECT_DIR/android/app/release-key.jks" \
@@ -1795,7 +1911,34 @@ jobs:
 
 
       # ============================================================
-      # 22. GERAR APK RELEASE
+      # 22. VALIDAR VERSÃO
+      # ============================================================
+      - name: Validar versão V119
+        shell: bash
+        run: |
+          set -e
+
+          APP_GRADLE="$PROJECT_DIR/android/app/build.gradle"
+
+          grep -q \
+            'versionName "1.19.0"' \
+            "$APP_GRADLE" || {
+              echo "ERRO: versionName 1.19.0 não encontrado."
+              exit 1
+            }
+
+          grep -q \
+            'versionCode 119' \
+            "$APP_GRADLE" || {
+              echo "ERRO: versionCode 119 não encontrado."
+              exit 1
+            }
+
+          echo "OK: V119 configurada."
+
+
+      # ============================================================
+      # 23. GERAR APK RELEASE
       # ============================================================
       - name: Gerar APK RELEASE
         shell: bash
@@ -1829,7 +1972,7 @@ jobs:
 
 
       # ============================================================
-      # 23. LOCALIZAR APK
+      # 24. LOCALIZAR APK
       # ============================================================
       - name: Localizar APK final
         shell: bash
@@ -1856,7 +1999,7 @@ jobs:
 
 
       # ============================================================
-      # 24. VALIDAR APK
+      # 25. VALIDAR PERMISSÕES E MANIFEST DO APK
       # ============================================================
       - name: Validar permissões e compartilhamento no APK
         shell: bash
@@ -1877,6 +2020,11 @@ jobs:
             echo "ERRO: aapt não encontrado."
             exit 1
           }
+
+
+          # ========================================================
+          # PERMISSÕES
+          # ========================================================
 
           "$AAPT" dump permissions "$APK" \
             | tee /tmp/apk-permissions.txt
@@ -1902,12 +2050,22 @@ jobs:
 
           done
 
+
+          # ========================================================
+          # MANIFEST FINAL
+          # ========================================================
+
           FINAL_MANIFEST="/tmp/final-v119-manifest.txt"
 
           "$AAPT" dump xmltree \
             "$APK" \
             AndroidManifest.xml \
-            | tee "$FINAL_MANIFEST" >/dev/null
+            | tee "$FINAL_MANIFEST"
+
+
+          # ========================================================
+          # SINGLE TASK
+          # ========================================================
 
           grep -q \
             'singleTask' \
@@ -1918,44 +2076,104 @@ jobs:
             exit 1
           }
 
+          echo "OK NO APK: singleTask"
+
+
+          # ========================================================
+          # ACTION_SEND
+          # ========================================================
+
+          grep -q \
+            'android.intent.action.SEND' \
+            "$FINAL_MANIFEST" || {
+
+            echo "ERRO: ACTION_SEND não entrou no APK."
+
+            exit 1
+          }
+
+          echo "OK NO APK: ACTION_SEND"
+
+
+          # ========================================================
+          # SEND_MULTIPLE
+          # ========================================================
+
+          grep -q \
+            'android.intent.action.SEND_MULTIPLE' \
+            "$FINAL_MANIFEST" || {
+
+            echo "ERRO: SEND_MULTIPLE não entrou no APK."
+
+            exit 1
+          }
+
+          echo "OK NO APK: SEND_MULTIPLE"
+
+
+          # ========================================================
+          # AUDIO
+          # ========================================================
+
           grep -q \
             'audio/\*' \
             "$FINAL_MANIFEST" || {
 
-            echo "ERRO: audio/* não encontrado no APK."
+            echo "ERRO: audio/* não entrou no APK."
 
             exit 1
           }
+
+          echo "OK NO APK: audio/*"
+
+
+          # ========================================================
+          # IMAGE
+          # ========================================================
 
           grep -q \
             'image/\*' \
             "$FINAL_MANIFEST" || {
 
-            echo "ERRO: image/* não encontrado no APK."
+            echo "ERRO: image/* não entrou no APK."
 
             exit 1
           }
+
+          echo "OK NO APK: image/*"
+
+
+          # ========================================================
+          # MIME GENÉRICO
+          # ========================================================
 
           grep -q \
             '\*/\*' \
             "$FINAL_MANIFEST" || {
 
-            echo "ERRO: */* não encontrado no APK."
+            echo "ERRO: */* não entrou no APK."
 
             exit 1
           }
 
+          echo "OK NO APK: */*"
+
+
+          echo ""
           echo "======================================"
-          echo "OK: APK V119 possui:"
-          echo "- singleTask"
-          echo "- áudio"
-          echo "- foto"
-          echo "- MIME genérico"
+          echo "V119 VALIDADA NO APK FINAL"
+          echo "======================================"
+          echo "singleTask       : OK"
+          echo "ACTION_SEND      : OK"
+          echo "SEND_MULTIPLE    : OK"
+          echo "audio/*          : OK"
+          echo "image/*          : OK"
+          echo "*/*              : OK"
           echo "======================================"
 
 
       # ============================================================
-      # 25. VALIDAR ASSINATURA
+      # 26. VALIDAR ASSINATURA
       # ============================================================
       - name: Validar assinatura do APK
         shell: bash
@@ -1983,7 +2201,7 @@ jobs:
 
 
       # ============================================================
-      # 26. DISPONIBILIZAR APK
+      # 27. DISPONIBILIZAR APK
       # ============================================================
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
@@ -1995,7 +2213,7 @@ jobs:
 
 
       # ============================================================
-      # 27. LIMPAR KEYSTORE
+      # 28. LIMPAR KEYSTORE
       # ============================================================
       - name: Limpar arquivo temporário de assinatura
         if: always()
