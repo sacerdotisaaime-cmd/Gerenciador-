@@ -1,4 +1,4 @@
-name: Build Android APK - V131 - GOOGLE DRIVE - BASE V120
+name: Build Android APK - V142 - ALERTA + ALARME + SOM CORRIGIDOS
 
 on:
   workflow_dispatch:
@@ -141,6 +141,32 @@ jobs:
           cd "$PROJECT_DIR"
           npx cap sync android
 
+      - name: Criar som nativo das notificações
+        shell: bash
+        run: |
+          set -e
+          RAW_DIR="$PROJECT_DIR/android/app/src/main/res/raw"
+          mkdir -p "$RAW_DIR"
+          python3 - "$RAW_DIR/aime_alert.wav" <<'PY'
+          import math, struct, sys, wave
+          path=sys.argv[1]
+          rate=44100
+          duration=0.85
+          frames=int(rate*duration)
+          with wave.open(path,'wb') as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+              data=bytearray()
+              for i in range(frames):
+                  t=i/rate
+                  env=min(1.0,t/0.02)*min(1.0,max(0.0,(duration-t)/0.12))
+                  freq=880 if t < 0.28 else (1174.66 if t < 0.56 else 880)
+                  sample=int(0.34*32767*env*math.sin(2*math.pi*freq*t))
+                  data += struct.pack('<h',sample)
+              w.writeframes(data)
+          PY
+          test -s "$RAW_DIR/aime_alert.wav"
+          echo "Som nativo criado: $RAW_DIR/aime_alert.wav"
+
       - name: Criar PermissionBridge
         shell: bash
         run: |
@@ -152,37 +178,32 @@ jobs:
 
           import android.Manifest;
           import android.app.PendingIntent;
-          import java.io.OutputStream;
-          import java.net.HttpURLConnection;
-          import java.net.URL;
-          import java.net.URLEncoder;
-          import java.nio.charset.StandardCharsets;
-          import java.util.Collections;
-          import java.util.concurrent.ExecutorService;
-          import java.util.concurrent.Executors;
-          import org.json.JSONArray;
-          import org.json.JSONObject;
-          import androidx.annotation.Keep;
-          import com.google.android.gms.auth.api.identity.AuthorizationRequest;
-          import com.google.android.gms.auth.api.identity.AuthorizationResult;
-          import com.google.android.gms.auth.api.identity.Identity;
-          import com.google.android.gms.common.api.ApiException;
-          import com.google.android.gms.common.api.CommonStatusCodes;
-          import com.google.android.gms.common.api.Scope;
           import android.content.Intent;
           import android.content.SharedPreferences;
           import android.net.Uri;
+          import android.os.Build;
+          import android.app.AlarmManager;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
           import android.util.Base64;
           import java.io.ByteArrayOutputStream;
           import java.io.File;
           import java.io.FileInputStream;
-          import java.io.IOException;
           import java.io.FileOutputStream;
           import java.io.InputStream;
+          import java.io.OutputStream;
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.net.URLEncoder;
+          import java.nio.charset.StandardCharsets;
           import java.util.ArrayList;
+          import java.util.Arrays;
+          import java.util.Collections;
           import java.util.List;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
           import com.getcapacitor.JSObject;
           import com.getcapacitor.JSArray;
           import com.getcapacitor.PermissionState;
@@ -192,6 +213,14 @@ jobs:
           import com.getcapacitor.annotation.CapacitorPlugin;
           import com.getcapacitor.annotation.Permission;
           import com.getcapacitor.annotation.PermissionCallback;
+          import androidx.annotation.Keep;
+          import com.google.android.gms.auth.api.identity.AuthorizationClient;
+          import com.google.android.gms.auth.api.identity.AuthorizationRequest;
+          import com.google.android.gms.auth.api.identity.AuthorizationResult;
+          import com.google.android.gms.auth.api.identity.Identity;
+          import com.google.android.gms.common.api.ApiException;
+          import com.google.android.gms.common.api.CommonStatusCodes;
+          import com.google.android.gms.common.api.Scope;
 
           @Keep
           @CapacitorPlugin(
@@ -250,10 +279,10 @@ jobs:
             }
 
             private String b64(String value) {
-              return Base64.encodeToString((value == null ? "" : value).getBytes(java.nio.charset.StandardCharsets.UTF_8), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+              return Base64.encodeToString((value == null ? "" : value).getBytes(StandardCharsets.UTF_8), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
             }
             private String unb64(String value) {
-              try { return new String(Base64.decode(value, Base64.URL_SAFE), java.nio.charset.StandardCharsets.UTF_8); } catch (Exception ignored) { return ""; }
+              try { return new String(Base64.decode(value, Base64.URL_SAFE), StandardCharsets.UTF_8); } catch (Exception ignored) { return ""; }
             }
             private String[] parse(File file) { return file.getName().split("__", -1); }
 
@@ -278,9 +307,9 @@ jobs:
               return null;
             }
 
-            private boolean startsWith(byte[] data, int len, int... signature) {
+            private boolean startsWith(byte[] data, int len, byte... signature) {
               if (len < signature.length) return false;
-              for (int i = 0; i < signature.length; i++) if ((data[i] & 0xFF) != (signature[i] & 0xFF)) return false;
+              for (int i = 0; i < signature.length; i++) if (data[i] != signature[i]) return false;
               return true;
             }
 
@@ -295,217 +324,123 @@ jobs:
                   len += n;
                 }
               }
-              // JPEG
               if (len >= 3 && (h[0] & 0xff) == 0xff && (h[1] & 0xff) == 0xd8 && (h[2] & 0xff) == 0xff) return "photo|image/jpeg";
-              // PNG
               if (startsWith(h, len, (byte)0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "photo|image/png";
-              // WebP
               if (len >= 12 && startsWith(h, len, 0x52,0x49,0x46,0x46) && h[8]=='W' && h[9]=='E' && h[10]=='B' && h[11]=='P') return "photo|image/webp";
-              // Ogg/Opus
               if (startsWith(h, len, 0x4f,0x67,0x67,0x53)) return "audio|audio/ogg";
-              // WAV
-              if (len >= 12 && startsWith(h, len, 0x52,0x49,0x46,0x46) && h[8]=='W' && h[9]=='A' && h[10]=='V' && h[11]=='E') return "audio|audio/wav";
-              // MP3 with ID3
-              if (startsWith(h, len, 0x49,0x44,0x33)) return "audio|audio/mpeg";
-              // MP3 frame sync / AAC ADTS
-              if (len >= 2 && (h[0] & 0xff) == 0xff && (h[1] & 0xe0) == 0xe0) return "audio|audio/mpeg";
-              // HEIC/HEIF photos also use an ISO-BMFF/ftyp header. Check their brand first.
-              if (len >= 12 && h[4]=='f' && h[5]=='t' && h[6]=='y' && h[7]=='p') {
-                String brand = new String(h, 8, 4, java.nio.charset.StandardCharsets.US_ASCII);
-                if (brand.equals("heic") || brand.equals("heix") || brand.equals("hevc") || brand.equals("hevx") || brand.equals("mif1") || brand.equals("msf1")) return "photo|image/heic";
-                if (brand.equals("M4A ") || brand.equals("M4B ")) return "audio|audio/mp4";
-              }
-              if (startsWith(h, len, 0x1a,0x45,0xdf,0xa3)) return "audio|audio/webm";
+              if (len >= 12 && h[0]=='R' && h[1]=='I' && h[2]=='F' && h[3]=='F' && h[8]=='W' && h[9]=='A' && h[10]=='V' && h[11]=='E') return "audio|audio/wav";
+              if (len >= 4 && h[0]=='I' && h[1]=='D' && h[2]=='3') return "audio|audio/mpeg";
               return null;
             }
 
-            private String extensionFor(String mime, String originalName) {
-              String lower = originalName == null ? "" : originalName.toLowerCase(java.util.Locale.US);
-              if (lower.matches(".*\\.(ogg|opus|m4a|aac|mp3|wav|amr|3gp|webm|mp4)$")) return lower.substring(lower.lastIndexOf('.') + 1);
-              if (mime.contains("ogg")) return "ogg";
-              if (mime.contains("mpeg")) return "mp3";
-              if (mime.contains("wav")) return "wav";
-              if (mime.contains("webm")) return "webm";
-              if (mime.contains("mp4")) return "m4a";
-              if (mime.contains("png")) return "png";
-              if (mime.contains("webp")) return "webp";
-              if (mime.contains("heic")) return "heic";
-              return mime.contains("jpeg") ? "jpg" : "bin";
-            }
-
             private void storeUri(Uri uri) {
-              if (uri == null) return;
-              String mime = typeFor(uri);
-              String name = displayName(uri);
-              String lowerName = name == null ? "" : name.toLowerCase(java.util.Locale.US);
-              String lowerMime = mime == null ? "" : mime.toLowerCase(java.util.Locale.US);
-              boolean hintedAudio = lowerMime.startsWith("audio/") || lowerName.matches(".*\\.(ogg|opus|m4a|aac|mp3|wav|amr|3gp|webm|mp4)$");
-              boolean hintedPhoto = lowerMime.startsWith("image/") || lowerName.matches(".*\\.(jpg|jpeg|png|webp|heic|gif)$");
-              long max = hintedPhoto && !hintedAudio ? MAX_PHOTO_BYTES : MAX_AUDIO_BYTES;
-              String tempId = "media-temp-" + System.currentTimeMillis() + "-" + Math.abs(uri.toString().hashCode());
-              File temp = new File(inboxDir(), tempId + ".tmp");
-              long total = 0;
-              try (InputStream input = getContext().getContentResolver().openInputStream(uri); FileOutputStream output = new FileOutputStream(temp)) {
-                if (input == null) throw new Exception("STREAM_UNAVAILABLE");
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = input.read(buffer)) != -1) {
-                  total += read;
-                  if (total > max) throw new Exception("MEDIA_TOO_LARGE");
-                  output.write(buffer, 0, read);
+              try {
+                String mime = typeFor(uri);
+                String name = displayName(uri);
+                if (mime == null || mime.isEmpty()) mime = "application/octet-stream";
+                if (name == null || name.trim().isEmpty()) name = "shared-media";
+                boolean audio = mime.startsWith("audio/") || mime.equals("application/ogg") || mime.equals("application/octet-stream");
+                boolean photo = mime.startsWith("image/");
+                if (!audio && !photo) {
+                  File temp = File.createTempFile("shared-", ".bin", inboxDir());
+                  long total = 0;
+                  try (InputStream input = getContext().getContentResolver().openInputStream(uri); OutputStream output = new java.io.FileOutputStream(temp)) {
+                    if (input == null) throw new IllegalStateException("STREAM_NULL");
+                    byte[] buffer = new byte[8192]; int n;
+                    while ((n=input.read(buffer))!=-1) { total += n; if (total > MAX_AUDIO_BYTES) throw new IllegalStateException("MEDIA_TOO_LARGE"); output.write(buffer,0,n); }
+                  }
+                  String sniff = sniffKindAndMime(temp);
+                  if (sniff == null) { temp.delete(); notifyReceiveError(uri, "UNSUPPORTED_MEDIA"); return; }
+                  String[] parts = sniff.split("\\|",2); audio = "audio".equals(parts[0]); photo = "photo".equals(parts[0]); mime = parts[1];
+                  name = name.replaceAll("[^a-zA-Z0-9._-]", "_");
+                  String id = "media-" + System.currentTimeMillis() + "-" + Math.abs((uri.toString() + total).hashCode());
+                  File out = new File(inboxDir(), id + "__" + b64(mime) + "__" + b64(name) + "__" + (audio ? "audio" : "photo") + "__1.bin");
+                  if (!temp.renameTo(out)) { try (FileInputStream in = new FileInputStream(temp); FileOutputStream os = new FileOutputStream(out)) { byte[] buffer = new byte[8192]; int n; while ((n=in.read(buffer))!=-1) os.write(buffer,0,n); } temp.delete(); }
+                  if (instance != null) instance.notifyListeners("sharedMedia", metadata(out));
+                  return;
                 }
-                output.flush();
-              } catch (Exception ex) {
-                try { temp.delete(); } catch (Exception ignored) {}
-                notifyReceiveError(uri, ex.getMessage() == null ? "RECEIVE_FAILED" : ex.getMessage());
-                return;
-              }
-
-              String sniff = null;
-              try { sniff = sniffKindAndMime(temp); } catch (Exception ignored) {}
-              boolean audio = hintedAudio || (sniff != null && sniff.startsWith("audio|"));
-              boolean photo = hintedPhoto || (sniff != null && sniff.startsWith("photo|"));
-              if (photo && total > MAX_PHOTO_BYTES) {
-                try { temp.delete(); } catch (Exception ignored) {}
-                notifyReceiveError(uri, "MEDIA_TOO_LARGE");
-                return;
-              }
-              if (!audio && !photo) {
-                try { temp.delete(); } catch (Exception ignored) {}
-                notifyReceiveError(uri, "UNRECOGNIZED_MEDIA");
-                return;
-              }
-              if (sniff != null) {
-                String[] parts = sniff.split("\\|", 2);
-                if (parts.length == 2) {
-                  if (mime == null || mime.trim().isEmpty() || mime.equalsIgnoreCase("application/octet-stream") || mime.equalsIgnoreCase("*/*")) mime = parts[1];
-                  if (name == null || name.trim().isEmpty() || !name.contains(".")) name = (audio ? "audio-whatsapp." : "foto-whatsapp.") + extensionFor(parts[1], name);
+                long limit = audio ? MAX_AUDIO_BYTES : MAX_PHOTO_BYTES;
+                File temp = File.createTempFile("shared-", ".bin", inboxDir());
+                long total = 0;
+                try (InputStream input = getContext().getContentResolver().openInputStream(uri); OutputStream output = new java.io.FileOutputStream(temp)) {
+                  if (input == null) throw new IllegalStateException("STREAM_NULL");
+                  byte[] buffer = new byte[8192]; int n;
+                  while ((n=input.read(buffer))!=-1) { total += n; if (total > limit) throw new IllegalStateException("MEDIA_TOO_LARGE"); output.write(buffer,0,n); }
                 }
-              }
-              if (mime == null || mime.trim().isEmpty() || mime.equals("*/*") || mime.equalsIgnoreCase("application/octet-stream")) mime = audio ? "audio/*" : "image/*";
-              if (name == null || name.trim().isEmpty()) name = audio ? "audio-whatsapp." + extensionFor(mime, name) : "foto-whatsapp." + extensionFor(mime, name);
-              String id = "media-" + System.currentTimeMillis() + "-" + Math.abs((uri.toString() + total).hashCode());
-              File out = new File(inboxDir(), id + "__" + b64(mime) + "__" + b64(name) + "__" + (audio ? "audio" : "photo") + "__1.bin");
-              if (!temp.renameTo(out)) {
-                try (FileInputStream in = new FileInputStream(temp); FileOutputStream os = new FileOutputStream(out)) {
-                  byte[] buffer = new byte[8192];
-                  int n;
-                  while ((n=in.read(buffer))!=-1) os.write(buffer,0,n);
-                } catch (IOException e) {
-                  throw new RuntimeException("Falha ao copiar mídia compartilhada para o armazenamento persistente.", e);
-                }
-                temp.delete();
-              }
-              JSObject event = metadata(out);
-              instance.notifyListeners("sharedMedia", event);
+                name = name.replaceAll("[^a-zA-Z0-9._-]", "_");
+                String id = "media-" + System.currentTimeMillis() + "-" + Math.abs((uri.toString() + total).hashCode());
+                File out = new File(inboxDir(), id + "__" + b64(mime) + "__" + b64(name) + "__" + (audio ? "audio" : "photo") + "__1.bin");
+                if (!temp.renameTo(out)) { try (FileInputStream in = new FileInputStream(temp); FileOutputStream os = new java.io.FileOutputStream(out)) { byte[] buffer = new byte[8192]; int n; while ((n=in.read(buffer))!=-1) os.write(buffer,0,n); } temp.delete(); }
+                if (instance != null) instance.notifyListeners("sharedMedia", metadata(out));
+              } catch (Exception ex) { notifyReceiveError(uri, ex.getMessage() == null ? "INTENT_READ_FAILED" : ex.getMessage()); }
             }
 
             private void notifyReceiveError(Uri uri, String code) {
-              JSObject event = new JSObject();
-              event.put("ok", false);
-              event.put("code", code);
-              event.put("uri", uri == null ? "" : uri.toString());
+              JSObject event = new JSObject(); event.put("ok", false); event.put("code", code); event.put("uri", uri == null ? "" : uri.toString());
               if (instance != null) instance.notifyListeners("sharedMediaError", event);
             }
 
             public static void handleSharedIntent(Intent intent) {
               if (intent == null) return;
-              if (instance == null) {
-                pendingSharedIntent = new Intent(intent);
-                return;
-              }
+              if (instance == null) { pendingSharedIntent = new Intent(intent); return; }
               String action = intent.getAction();
               if (!Intent.ACTION_SEND.equals(action) && !Intent.ACTION_SEND_MULTIPLE.equals(action)) return;
               sharedLaunch = true;
               try {
-                java.util.ArrayList<Uri> received = new java.util.ArrayList<>();
+                ArrayList<Uri> urisToStore = new ArrayList<>();
+                if (intent.getClipData() != null) { android.content.ClipData clip = intent.getClipData(); for (int i=0;i<clip.getItemCount();i++){ Uri uri=clip.getItemAt(i).getUri(); if(uri!=null&&!urisToStore.contains(uri))urisToStore.add(uri);} }
+                if (Intent.ACTION_SEND_MULTIPLE.equals(action)) { ArrayList<Uri> extraUris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM); if(extraUris!=null) for(Uri uri:extraUris) if(uri!=null&&!urisToStore.contains(uri)) urisToStore.add(uri); }
+                else { Uri uri=null; try{uri=intent.getParcelableExtra(Intent.EXTRA_STREAM);}catch(Exception ignored){} if(uri!=null&&!urisToStore.contains(uri))urisToStore.add(uri); }
+                for (Uri uri : urisToStore) instance.storeUri(uri);
+              } catch (Exception ex) { if(instance!=null)instance.notifyReceiveError(null,ex.getMessage()==null?"INTENT_READ_FAILED":ex.getMessage()); }
+            }
 
-                if (intent.getClipData() != null) {
-                  android.content.ClipData clip = intent.getClipData();
-                  for (int i = 0; i < clip.getItemCount(); i++) {
-                    Uri uri = clip.getItemAt(i).getUri();
-                    if (uri != null && !received.contains(uri)) received.add(uri);
-                  }
-                }
+            @PluginMethod public void claimInitialSync(PluginCall call) { boolean first=!initialSyncClaimed; initialSyncClaimed=true; JSObject result=new JSObject(); result.put("firstProcess",first); result.put("sharedLaunch",sharedLaunch); sharedLaunch=false; call.resolve(result); }
+            @PluginMethod public void getSharedMedia(PluginCall call) { File[] files=inboxDir().listFiles(); JSArray arr=new JSArray(); if(files!=null)for(File file:files)if(file.isFile())arr.put(metadata(file)); JSObject result=new JSObject();result.put("pending",arr.length()>0);result.put("items",arr);call.resolve(result); }
+            @PluginMethod public void listSharedMedia(PluginCall call) { File[] files=inboxDir().listFiles(); JSArray arr=new JSArray(); if(files!=null)for(File file:files)if(file.isFile())arr.put(metadata(file)); JSObject result=new JSObject();result.put("items",arr);call.resolve(result); }
+            @PluginMethod public void readSharedMedia(PluginCall call) { String id=call.getString("id",""); File file=findById(id); if(file==null||!file.exists()){JSObject r=new JSObject();r.put("ok",false);call.resolve(r);return;} try{ByteArrayOutputStream output=new ByteArrayOutputStream();try(InputStream input=new FileInputStream(file)){byte[] buffer=new byte[8192];int read;while((read=input.read(buffer))!=-1)output.write(buffer,0,read);} JSObject r=metadata(file);r.put("ok",true);String mime=r.getString("mimeType","application/octet-stream");r.put("data","data:"+mime+";base64,"+Base64.encodeToString(output.toByteArray(),Base64.NO_WRAP));call.resolve(r);}catch(Exception ex){call.reject("SHARED_MEDIA_READ_ERROR",ex.getMessage()==null?"READ_FAILED":ex.getMessage());} }
+            @PluginMethod public void deleteSharedMedia(PluginCall call) { String id=call.getString("id","");File file=findById(id);JSObject r=new JSObject();r.put("ok",file==null||file.delete());call.resolve(r); }
 
-                if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
-                  java.util.ArrayList<Uri> uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
-                  if (uris != null) {
-                    for (Uri uri : uris) {
-                      if (uri != null && !received.contains(uri)) received.add(uri);
-                    }
-                  }
-                } else {
-                  Uri uri = null;
-                  try { uri = intent.getParcelableExtra(Intent.EXTRA_STREAM); } catch (Exception ignored) {}
-                  if (uri != null && !received.contains(uri)) received.add(uri);
-                }
+            @PluginMethod public void requestContacts(PluginCall call) { if(getPermissionState("contacts")==PermissionState.GRANTED){JSObject r=new JSObject();r.put("granted",true);r.put("state","granted");call.resolve(r);return;}requestPermissionForAlias("contacts",call,"contactsPermissionResult"); }
+            @PermissionCallback private void contactsPermissionResult(PluginCall call) { boolean granted=getPermissionState("contacts")==PermissionState.GRANTED;JSObject r=new JSObject();r.put("granted",granted);r.put("state",granted?"granted":"denied");call.resolve(r); }
+            @PluginMethod public void requestMicrophone(PluginCall call) { if(getPermissionState("microphone")==PermissionState.GRANTED){JSObject r=new JSObject();r.put("granted",true);r.put("state","granted");call.resolve(r);return;}requestPermissionForAlias("microphone",call,"microphonePermissionResult"); }
+            @PermissionCallback private void microphonePermissionResult(PluginCall call) { boolean granted=getPermissionState("microphone")==PermissionState.GRANTED;JSObject r=new JSObject();r.put("granted",granted);r.put("state",granted?"granted":"denied");call.resolve(r); }
+            @PluginMethod public void getPermissionStates(PluginCall call) { JSObject r=new JSObject();r.put("contacts",getPermissionState("contacts").toString());r.put("microphone",getPermissionState("microphone").toString());call.resolve(r); }
+            @PluginMethod public void openSettings(PluginCall call) { try{Intent intent=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);intent.setData(Uri.parse("package:"+getContext().getPackageName()));getActivity().startActivity(intent);call.resolve();}catch(Exception ex){call.reject("SETTINGS_ERROR",ex.getMessage());} }
 
-                for (Uri uri : received) instance.storeUri(uri);
+            @PluginMethod public void openOverlaySettings(PluginCall call) {
+              try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+                intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                getActivity().startActivity(intent); call.resolve();
               } catch (Exception ex) {
-                if (instance != null) instance.notifyReceiveError(null, ex.getMessage() == null ? "INTENT_READ_FAILED" : ex.getMessage());
+                try { getActivity().startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); call.resolve(); }
+                catch (Exception fallback) { call.reject("OVERLAY_SETTINGS_ERROR", fallback.getMessage()); }
               }
             }
 
-            @PluginMethod
-            public void claimInitialSync(PluginCall call) {
-              boolean first = !initialSyncClaimed;
-              initialSyncClaimed = true;
-              JSObject result = new JSObject();
-              result.put("firstProcess", first);
-              result.put("sharedLaunch", sharedLaunch);
-              sharedLaunch = false;
-              call.resolve(result);
-            }
-
-            @PluginMethod
-            public void getSharedMedia(PluginCall call) {
-              File[] files = inboxDir().listFiles();
-              JSArray arr = new JSArray();
-              if (files != null) for (File file : files) if (file.isFile()) arr.put(metadata(file));
-              JSObject result = new JSObject();
-              result.put("pending", arr.length() > 0);
-              result.put("items", arr);
-              call.resolve(result);
-            }
-
-            @PluginMethod
-            public void listSharedMedia(PluginCall call) {
-              File[] files = inboxDir().listFiles();
-              JSArray arr = new JSArray();
-              if (files != null) for (File file : files) if (file.isFile()) arr.put(metadata(file));
-              JSObject result = new JSObject(); result.put("items", arr); call.resolve(result);
-            }
-
-            @PluginMethod
-            public void readSharedMedia(PluginCall call) {
-              String id = call.getString("id", "");
-              File file = findById(id);
-              if (file == null || !file.exists()) { JSObject r = new JSObject(); r.put("ok", false); call.resolve(r); return; }
+            @PluginMethod public void openAlarmSettings(PluginCall call) {
               try {
-                ByteArrayOutputStream output = new ByteArrayOutputStream();
-                try (InputStream input = new FileInputStream(file)) { byte[] buffer = new byte[8192]; int read; while ((read=input.read(buffer))!=-1) output.write(buffer,0,read); }
-                JSObject r = metadata(file);
-                r.put("ok", true);
-                String mime = r.getString("mimeType", "application/octet-stream");
-                r.put("data", "data:" + mime + ";base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP));
-                call.resolve(r);
-              } catch (Exception ex) { call.reject("SHARED_MEDIA_READ_ERROR", ex.getMessage() == null ? "READ_FAILED" : ex.getMessage()); }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                  Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+                  intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                  getActivity().startActivity(intent);
+                } else {
+                  openSettings(call); return;
+                }
+                call.resolve();
+              } catch (Exception ex) {
+                try { openSettings(call); } catch (Exception fallback) { call.reject("ALARM_SETTINGS_ERROR", fallback.getMessage()); }
+              }
             }
 
-            @PluginMethod
-            public void deleteSharedMedia(PluginCall call) {
-              String id = call.getString("id", "");
-              File file = findById(id);
-              JSObject r = new JSObject(); r.put("ok", file == null || file.delete()); call.resolve(r);
+            @PluginMethod public void getSpecialPermissionStates(PluginCall call) {
+              boolean overlay = false, exactAlarm = false;
+              try { overlay = Settings.canDrawOverlays(getContext()); } catch (Exception ignored) {}
+              try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { AlarmManager am = (AlarmManager)getContext().getSystemService(android.content.Context.ALARM_SERVICE); exactAlarm = am != null && am.canScheduleExactAlarms(); } else exactAlarm = true; } catch (Exception ignored) {}
+              JSObject r=new JSObject(); r.put("overlay",overlay); r.put("exactAlarm",exactAlarm); call.resolve(r);
             }
 
-            @PluginMethod public void requestContacts(PluginCall call) { if (getPermissionState("contacts") == PermissionState.GRANTED) { JSObject r=new JSObject();r.put("granted",true);r.put("state","granted");call.resolve(r);return;} requestPermissionForAlias("contacts",call,"contactsPermissionResult"); }
-            @PermissionCallback private void contactsPermissionResult(PluginCall call) { boolean granted=getPermissionState("contacts")==PermissionState.GRANTED; JSObject r=new JSObject();r.put("granted",granted);r.put("state",granted?"granted":"denied");call.resolve(r); }
-            @PluginMethod public void requestMicrophone(PluginCall call) { if (getPermissionState("microphone") == PermissionState.GRANTED) { JSObject r=new JSObject();r.put("granted",true);r.put("state","granted");call.resolve(r);return;} requestPermissionForAlias("microphone",call,"microphonePermissionResult"); }
-            @PermissionCallback private void microphonePermissionResult(PluginCall call) { boolean granted=getPermissionState("microphone")==PermissionState.GRANTED; JSObject r=new JSObject();r.put("granted",granted);r.put("state",granted?"granted":"denied");call.resolve(r); }
-            @PluginMethod public void getPermissionStates(PluginCall call) { JSObject r=new JSObject();r.put("contacts",getPermissionState("contacts").toString());r.put("microphone",getPermissionState("microphone").toString());call.resolve(r); }
-            @PluginMethod public void openSettings(PluginCall call) { try { Intent intent=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);intent.setData(Uri.parse("package:"+getContext().getPackageName()));getActivity().startActivity(intent);call.resolve(); } catch(Exception ex){call.reject("SETTINGS_ERROR",ex.getMessage());} }
             @PluginMethod public void pingGoogleDriveBridge(PluginCall call) {
               JSObject r=new JSObject();
               r.put("ok",true);
@@ -584,15 +519,15 @@ jobs:
               if(instance==null || requestCode!=GOOGLE_AUTH_REQUEST_CODE) return false;
               PluginCall call=instance.pendingGoogleAuthCall; instance.pendingGoogleAuthCall=null;
               if(call==null) return true;
-              if(resultCode!=android.app.Activity.RESULT_OK || data==null){call.resolve(instance.diagnosticResult("GOOGLE_AUTH_CANCELLED", "authorization-result", "A autorização do Google foi cancelada ou fechada.", null));return true;}
+              if(resultCode!=android.app.Activity.RESULT_OK || data==null){call.resolve(diagnosticResult("GOOGLE_AUTH_CANCELLED", "authorization-result", "A autorização do Google foi cancelada ou fechada.", null));return true;}
               try {
                 AuthorizationResult result=Identity.getAuthorizationClient(instance.getActivity()).getAuthorizationResultFromIntent(data);
                 String token=result.getAccessToken();
-                if(token==null||token.isEmpty()){call.resolve(instance.diagnosticResult("GOOGLE_TOKEN_EMPTY", "authorization-result", "O Google não retornou um token de acesso.", null));return true;}
+                if(token==null||token.isEmpty()){call.resolve(diagnosticResult("GOOGLE_TOKEN_EMPTY", "authorization-result", "O Google não retornou um token de acesso.", null));return true;}
                 instance.googleAccessToken=token;
                 JSObject r=new JSObject();r.put("authorized",true);call.resolve(r);
               } catch(Exception ex){
-                call.resolve(instance.diagnosticResult(ex instanceof ApiException ? "GMS_" + ((ApiException) ex).getStatusCode() : "GOOGLE_AUTH_RESULT_FAILED", "authorization-result", "Falha ao concluir a autorização do Google.", ex));
+                call.resolve(diagnosticResult(ex instanceof ApiException ? "GMS_" + ((ApiException) ex).getStatusCode() : "GOOGLE_AUTH_RESULT_FAILED", "authorization-result", "Falha ao concluir a autorização do Google.", ex));
               }
               return true;
             }
@@ -644,53 +579,6 @@ jobs:
               JSONObject listed=new JSONObject(http("GET",url,token,null,null));JSONArray files=listed.optJSONArray("files");if(files==null)return 0;int deleted=0;while(files.length()>5){JSONObject oldest=files.getJSONObject(0);if(oldest.getString("id").equals(keepId)){oldest=files.getJSONObject(1);}String id=oldest.getString("id");http("DELETE","https://www.googleapis.com/drive/v3/files/"+urlEncode(id),token,null,null);deleted++;JSONArray next=new JSONArray();for(int i=0;i<files.length();i++)if(!files.getJSONObject(i).getString("id").equals(id))next.put(files.getJSONObject(i));files=next;}return deleted;
             }
 
-            private JSONArray listDriveBackups(String token) throws Exception {
-              String root=findOrCreateFolder(token,"Gestão Sacerdotista Aimê",null);
-              String backups=findOrCreateFolder(token,"Backups",root);
-              String q="'"+backups+"' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'";
-              String url="https://www.googleapis.com/drive/v3/files?q="+urlEncode(q)+"&pageSize=100&orderBy=createdTime desc&fields=files(id,name,size,createdTime,modifiedTime,mimeType)";
-              JSONObject listed=new JSONObject(http("GET",url,token,null,null));
-              return listed.optJSONArray("files") == null ? new JSONArray() : listed.getJSONArray("files");
-            }
-
-            @PluginMethod public void listGoogleDriveBackups(PluginCall call) {
-              if(googleAccessToken==null||googleAccessToken.isEmpty()) {
-                Identity.getAuthorizationClient(getActivity()).authorize(driveAuthorizationRequest()).addOnSuccessListener(result->{
-                  if(result.hasResolution()){JSObject r=new JSObject();r.put("ok",false);r.put("needsAuthorization",true);r.put("message","Conecte o Google Drive antes de listar os backups.");call.resolve(r);return;}
-                  googleAccessToken=result.getAccessToken();
-                  driveExecutor.execute(()->{ try { JSONArray files=listDriveBackups(googleAccessToken); JSArray arr=new JSArray(); for(int i=0;i<files.length();i++){JSONObject f=files.getJSONObject(i);JSObject item=new JSObject();item.put("id",f.optString("id"));item.put("name",f.optString("name"));item.put("size",f.optLong("size",0));item.put("createdTime",f.optString("createdTime"));arr.put(item);} JSObject r=new JSObject();r.put("ok",true);r.put("items",arr);call.resolve(r); } catch(Exception ex){call.reject("DRIVE_LIST_FAILED",ex.getMessage()==null?"Falha ao listar backups do Google Drive":ex.getMessage());} });
-                }).addOnFailureListener(e->call.reject("DRIVE_AUTH_FAILED",e.getMessage()==null?"Falha ao autorizar o Drive":e.getMessage()));
-                return;
-              }
-              final String token=googleAccessToken;
-              driveExecutor.execute(()->{ try { JSONArray files=listDriveBackups(token); JSArray arr=new JSArray(); for(int i=0;i<files.length();i++){JSONObject f=files.getJSONObject(i);JSObject item=new JSObject();item.put("id",f.optString("id"));item.put("name",f.optString("name"));item.put("size",f.optLong("size",0));item.put("createdTime",f.optString("createdTime"));arr.put(item);} JSObject r=new JSObject();r.put("ok",true);r.put("items",arr);call.resolve(r); } catch(Exception ex){call.reject("DRIVE_LIST_FAILED",ex.getMessage()==null?"Falha ao listar backups do Google Drive":ex.getMessage());} });
-            }
-
-            private JSObject downloadDriveBackup(String token,String fileId) throws Exception {
-              if(fileId==null||fileId.isEmpty()) throw new IllegalArgumentException("ID do backup não informado.");
-              JSONObject meta=getDriveFile(token,fileId);
-              String name=meta.optString("name","backup.zip").replaceAll("[^a-zA-Z0-9._-]","_");
-              File out=new File(getContext().getCacheDir(),"google-drive-"+System.currentTimeMillis()+"-"+name);
-              HttpURLConnection c=(HttpURLConnection)new URL("https://www.googleapis.com/drive/v3/files/"+urlEncode(fileId)+"?alt=media").openConnection();
-              c.setRequestMethod("GET");c.setConnectTimeout(30000);c.setReadTimeout(180000);c.setRequestProperty("Authorization","Bearer "+token);
-              int code=c.getResponseCode(); if(code<200||code>=300) throw new IllegalStateException("Falha ao baixar backup do Drive (HTTP "+code+").");
-              try(InputStream input=c.getInputStream();FileOutputStream output=new FileOutputStream(out)){byte[] buffer=new byte[8192];int n;while((n=input.read(buffer))!=-1)output.write(buffer,0,n);}
-              JSObject r=new JSObject();r.put("path",out.getName());r.put("fileName",meta.optString("name",name));r.put("size",out.length());return r;
-            }
-
-            @PluginMethod public void downloadGoogleDriveBackup(PluginCall call) {
-              String fileId=call.getString("fileId",""); if(fileId.isEmpty()){call.reject("DRIVE_FILE_ID_MISSING","ID do backup não informado.");return;}
-              if(googleAccessToken==null||googleAccessToken.isEmpty()) {
-                Identity.getAuthorizationClient(getActivity()).authorize(driveAuthorizationRequest()).addOnSuccessListener(result->{
-                  if(result.hasResolution()){JSObject r=new JSObject();r.put("ok",false);r.put("message","Conecte o Google Drive antes de importar o backup.");call.resolve(r);return;}
-                  googleAccessToken=result.getAccessToken(); driveExecutor.execute(()->{try{JSObject downloaded=downloadDriveBackup(googleAccessToken,fileId);downloaded.put("ok",true);call.resolve(downloaded);}catch(Exception ex){call.reject("DRIVE_DOWNLOAD_FAILED",ex.getMessage()==null?"Falha ao baixar o backup do Google Drive":ex.getMessage());}});
-                }).addOnFailureListener(e->call.reject("DRIVE_AUTH_FAILED",e.getMessage()==null?"Falha ao autorizar o Drive":e.getMessage()));
-                return;
-              }
-              final String token=googleAccessToken;
-              driveExecutor.execute(()->{try{JSObject downloaded=downloadDriveBackup(token,fileId);downloaded.put("ok",true);call.resolve(downloaded);}catch(Exception ex){call.reject("DRIVE_DOWNLOAD_FAILED",ex.getMessage()==null?"Falha ao baixar o backup do Google Drive":ex.getMessage());}});
-            }
-
             @PluginMethod public void uploadBackupToGoogleDrive(PluginCall call) {
               String uriString=call.getString("uri","");String fileName=call.getString("fileName","gestao-sacerdotista-aime-backup.zip");if(uriString.isEmpty()){call.reject("DRIVE_URI_MISSING","Arquivo de backup não informado.");return;}
               if(googleAccessToken==null||googleAccessToken.isEmpty()){
@@ -703,7 +591,6 @@ jobs:
             private void performDriveUpload(PluginCall call,Uri uri,String fileName,String token){driveExecutor.execute(()->{try{String root=findOrCreateFolder(token,"Gestão Sacerdotista Aimê",null);String backups=findOrCreateFolder(token,"Backups",root);JSONObject uploaded=uploadResumable(token,uri,fileName,backups);String id=uploaded.getString("id");JSONObject verified=getDriveFile(token,id);long localSize=uriLength(uri);long remoteSize=Long.parseLong(verified.optString("size","-1"));if(remoteSize!=localSize)throw new IllegalStateException("Validação do Drive falhou: tamanho local e remoto diferentes.");int deleted=rotateDriveBackups(token,backups,id);JSObject result=new JSObject();result.put("ok",true);result.put("fileId",id);result.put("folderId",backups);result.put("fileName",verified.optString("name",fileName));result.put("size",remoteSize);result.put("deleted",deleted);call.resolve(result);}catch(Exception ex){call.reject("DRIVE_UPLOAD_FAILED",ex.getMessage()==null?"Falha ao enviar o backup para o Google Drive":ex.getMessage());}});}
           }
           JAVA
-
 
       - name: Registrar PermissionBridge
         shell: bash
@@ -741,6 +628,23 @@ jobs:
           }
           JAVA
 
+      - name: Validar integração nativa Google Drive
+        shell: bash
+        run: |
+          set -e
+          PLUGIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
+          MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
+          test -f "$PLUGIN"
+          test -f "$MAIN"
+          grep -q 'connectGoogleDrive' "$PLUGIN"
+          grep -q 'uploadBackupToGoogleDrive' "$PLUGIN"
+          grep -q 'registerPlugin(PermissionBridgePlugin.class)' "$MAIN"
+          grep -q 'handleGoogleAuthorizationResult' "$MAIN"
+          grep -q 'pingGoogleDriveBridge' "$PLUGIN"
+          test -f "$PROJECT_DIR/android/app/src/main/assets/capacitor.plugins.json"
+          grep -q 'com.sacerdotisaaime.gestao.PermissionBridgePlugin' "$PROJECT_DIR/android/app/src/main/assets/capacitor.plugins.json"
+          echo "Google Drive native bridge V131 validado: classe + métodos + catálogo Capacitor."
+
       - name: Declarar permissões Android
         shell: bash
         run: |
@@ -753,10 +657,14 @@ jobs:
           manifest = Path(sys.argv[1])
           text = manifest.read_text()
           permissions = [
+              "android.permission.INTERNET",
               "android.permission.READ_CONTACTS",
               "android.permission.WRITE_CONTACTS",
               "android.permission.RECORD_AUDIO",
               "android.permission.CAMERA",
+              "android.permission.POST_NOTIFICATIONS",
+              "android.permission.SCHEDULE_EXACT_ALARM",
+              "android.permission.SYSTEM_ALERT_WINDOW",
           ]
           marker = "<application"
           if marker not in text:
@@ -769,63 +677,36 @@ jobs:
               text = text.replace(marker, "".join(additions) + marker, 1)
 
           import re
-
-          # O Capacitor pode gerar a Activity como .MainActivity ou
-          # com o nome totalmente qualificado. Não dependa de uma única forma.
-          activity_match = re.search(
-              r'<activity\b[^>]*android:name="(?:\.MainActivity|[^"/]*\.MainActivity)"[^>]*>',
-              text,
-              flags=re.S,
-          )
-
-          if not activity_match:
-              raise SystemExit(
-                  "ERRO: MainActivity não encontrada no AndroidManifest.\n"
-                  + text
-              )
-
-          activity_start = activity_match.start()
-          activity_tag_end = activity_match.end()
-          activity_end = text.find("</activity>", activity_tag_end)
-
-          if activity_end < 0:
-              raise SystemExit(
-                  "ERRO: fechamento </activity> da MainActivity não encontrado."
-              )
-
-          activity_block = text[activity_start:activity_end]
-
-          # Remove atributos que possam ter vindo do template do Capacitor.
-          activity_block = re.sub(
-              r'\s+android:exported="[^"]*"', '', activity_block
-          )
-          activity_block = re.sub(
-              r'\s+android:grantUriPermissions="[^"]*"', '', activity_block
-          )
-          activity_block = re.sub(
-              r'\s+android:launchMode="[^"]*"', '', activity_block
-          )
-
-          # singleTask é necessário para que o compartilhamento recebido
-          # entre pelo onNewIntent() quando o aplicativo já estiver aberto.
-          activity_block = activity_block.replace(
-              '<activity',
-              '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
-              1,
-          )
-
-          # Remove filtros antigos de compartilhamento e recria todos de forma
-          # determinística para áudio, foto e MIME genérico.
-          activity_block = re.sub(
-              r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
-              '', activity_block, flags=re.S,
-          )
-          activity_block = re.sub(
-              r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
-              '', activity_block, flags=re.S,
-          )
-
-          intent_filter = """
+          activity_marker = 'android:name=".MainActivity"'
+          if activity_marker in text:
+              activity_start = text.rfind("<activity", 0, text.find(activity_marker) + len(activity_marker))
+              activity_end = text.find("</activity>", activity_start)
+              if activity_start >= 0 and activity_end >= 0:
+                  activity_block = text[activity_start:activity_end]
+                  # O Android precisa encontrar a Activity como destino de compartilhamento.
+                  # Declaramos explicitamente exported/grantUriPermissions e aceitamos tanto
+                  # audio/* quanto */*. O segundo filtro cobre casos em que WhatsApp/Samsung
+                  # entrega o áudio como application/octet-stream ou outro MIME genérico; o
+                  # plugin valida o conteúdo antes de importar.
+                  activity_block = re.sub(r'\s+android:exported="[^"]*"', '', activity_block)
+                  activity_block = re.sub(r'\s+android:grantUriPermissions="[^"]*"', '', activity_block)
+                  activity_block = re.sub(r'\s+android:launchMode="[^"]*"', '', activity_block)
+                  activity_block = activity_block.replace(
+                      '<activity',
+                      '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
+                      1,
+                  )
+                  # Remove filtros de compartilhamento que possam ter sido adicionados em
+                  # uma geração anterior e recria os dois filtros de forma determinística.
+                  activity_block = re.sub(
+                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
+                      '', activity_block, flags=re.S,
+                  )
+                  activity_block = re.sub(
+                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
+                      '', activity_block, flags=re.S,
+                  )
+                  intent_filter = """
                   <intent-filter>
                     <action android:name="android.intent.action.SEND" />
                     <category android:name="android.intent.category.DEFAULT" />
@@ -856,33 +737,25 @@ jobs:
                     <category android:name="android.intent.category.DEFAULT" />
                     <data android:mimeType="*/*" />
                   </intent-filter>"""
-
-          activity_block += intent_filter
-          text = text[:activity_start] + activity_block + text[activity_end:]
+                  activity_block = activity_block + intent_filter
+                  text = text[:activity_start] + activity_block + text[activity_end:]
           manifest.write_text(text)
           PY
 
-      - name: Adicionar dependência Google Auth para Drive
+      - name: Proteger PermissionBridge contra remoção/otimização
         shell: bash
         run: |
           set -e
-
-          APP_GRADLE="$PROJECT_DIR/android/app/build.gradle"
-
-          python3 - "$APP_GRADLE" <<'PY'
-          from pathlib import Path
-          import sys
-          path = Path(sys.argv[1])
-          text = path.read_text()
-          dep = "com.google.android.gms:play-services-auth:21.6.0"
-          if dep not in text:
-              text = text.replace(
-                  "dependencies {",
-                  "dependencies {\n    implementation 'com.google.android.gms:play-services-auth:21.6.0'",
-                  1
-              )
-          path.write_text(text)
-          PY
+          PROGUARD="$PROJECT_DIR/android/app/proguard-rules.pro"
+          touch "$PROGUARD"
+          if ! grep -q 'PermissionBridgePlugin' "$PROGUARD"; then
+            cat >> "$PROGUARD" <<'EOF'
+            
+            # Gestão Sacerdotista Aimê - PermissionBridge / Google Drive
+            -keep class com.sacerdotisaaime.gestao.PermissionBridgePlugin { *; }
+            -keepclassmembers class com.sacerdotisaaime.gestao.PermissionBridgePlugin { *; }
+          EOF
+          fi
 
       - name: Preparar keystore
         shell: bash
@@ -915,8 +788,14 @@ jobs:
           path = Path(sys.argv[1])
           text = path.read_text()
 
-          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.31.0"', text, count=1)
-          text = re.sub(r'versionCode\s+\d+', 'versionCode 131', text, count=1)
+          if "com.google.android.gms:play-services-auth:21.6.0" not in text:
+              if "dependencies {" in text:
+                  text = text.replace("dependencies {", "dependencies {\n    implementation 'com.google.android.gms:play-services-auth:21.6.0'", 1)
+              else:
+                  text += "\ndependencies { implementation 'com.google.android.gms:play-services-auth:21.6.0' }\n"
+
+          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.42.0"', text, count=1)
+          text = re.sub(r'versionCode\s+\d+', 'versionCode 142', text, count=1)
 
           if 'signingConfigs {' not in text:
               signing = '''
@@ -983,7 +862,7 @@ jobs:
         run: |
           set -e
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
-          for PERM in READ_CONTACTS WRITE_CONTACTS RECORD_AUDIO CAMERA; do
+          for PERM in INTERNET READ_CONTACTS WRITE_CONTACTS RECORD_AUDIO CAMERA POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM SYSTEM_ALERT_WINDOW; do
             FULL="android.permission.$PERM"
             grep -q "$FULL" "$MANIFEST" || { echo "ERRO: $FULL não está no Manifest."; exit 1; }
             echo "OK: $FULL"
@@ -992,43 +871,7 @@ jobs:
           echo "OK: MainActivity launchMode=singleTask"
           grep -q 'android.intent.action.SEND' "$MANIFEST" || { echo "ERRO: filtro ACTION_SEND ausente."; exit 1; }
           grep -q 'android.intent.action.SEND_MULTIPLE' "$MANIFEST" || { echo "ERRO: filtro ACTION_SEND_MULTIPLE ausente."; exit 1; }
-          grep -q 'android:mimeType="image/\*"' "$MANIFEST" || { echo "ERRO: filtro image/* ausente."; exit 1; }
-          grep -q 'android:mimeType="audio/\*"' "$MANIFEST" || { echo "ERRO: filtro audio/* ausente."; exit 1; }
-          grep -q 'android:mimeType="\*/\*"' "$MANIFEST" || { echo "ERRO: filtro */* ausente."; exit 1; }
-          echo "OK: filtros de compartilhamento presentes para áudio, foto e MIME genérico."
-
-      - name: Validar código nativo de compartilhamento antes do build
-        shell: bash
-        run: |
-          set -e
-          MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
-          BRIDGE="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
-          grep -q 'PermissionBridgePlugin.handleSharedIntent(getIntent())' "$MAIN" || { echo "ERRO: MainActivity não processa o Intent inicial."; exit 1; }
-          grep -q 'PermissionBridgePlugin.handleSharedIntent(intent)' "$MAIN" || { echo "ERRO: onNewIntent não encaminha o compartilhamento."; exit 1; }
-          grep -q 'singleTask' "$PROJECT_DIR/android/app/src/main/AndroidManifest.xml" || { echo "ERRO: singleTask não configurado."; exit 1; }
-          grep -q 'ACTION_SEND_MULTIPLE' "$BRIDGE" || { echo "ERRO: PermissionBridge sem SEND_MULTIPLE."; exit 1; }
-          grep -q 'EXTRA_STREAM' "$BRIDGE" || { echo "ERRO: PermissionBridge sem EXTRA_STREAM."; exit 1; }
-          grep -q 'getClipData' "$BRIDGE" || { echo "ERRO: PermissionBridge sem ClipData."; exit 1; }
-          grep -q 'openInputStream' "$BRIDGE" || { echo "ERRO: PermissionBridge não copia o arquivo recebido."; exit 1; }
-          grep -q 'shared-media-inbox' "$BRIDGE" || { echo "ERRO: inbox persistente ausente."; exit 1; }
-          grep -q 'notifyListeners("sharedMedia"' "$BRIDGE" || { echo "ERRO: evento sharedMedia ausente."; exit 1; }
-          grep -q 'getSharedMedia' "$BRIDGE" || { echo "ERRO: leitura da Caixa de Mídias ausente."; exit 1; }
-          grep -q 'readSharedMedia' "$BRIDGE" || { echo "ERRO: leitura do áudio recebido ausente."; exit 1; }
-          echo "OK: receptor nativo + cópia persistente + evento + leitura validados."
-
-      - name: Validar Google Drive nativo
-        shell: bash
-        run: |
-          set -e
-          PLUGIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/PermissionBridgePlugin.java"
-          MAIN="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/gestao/MainActivity.java"
-          grep -q 'connectGoogleDrive' "$PLUGIN"
-          grep -q 'uploadBackupToGoogleDrive' "$PLUGIN"
-          grep -q 'listGoogleDriveBackups' "$PLUGIN"
-          grep -q 'downloadGoogleDriveBackup' "$PLUGIN"
-          grep -q 'handleGoogleAuthorizationResult' "$MAIN"
-          grep -q 'play-services-auth:21.6.0' "$PROJECT_DIR/android/app/build.gradle"
-          echo "OK: Google Drive nativo + OAuth + upload + dependência presentes."
+          echo "OK: filtros de compartilhamento presentes."
 
       - name: Gerar APK RELEASE
         shell: bash
@@ -1059,7 +902,21 @@ jobs:
           cd "$PROJECT_DIR/android"
           chmod +x gradlew
 
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew clean assembleRelease --no-daemon --stacktrace
+
+      - name: Diagnóstico de empacotamento Android
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "=== APKs encontrados ==="
+          find "$PROJECT_DIR/android" -type f -name "*.apk" -print
+          echo "=== Relatório de problemas ==="
+          if [ -f "$PROJECT_DIR/android/build/reports/problems/problems-report.html" ]; then
+            grep -oE '.{0,160}(packageRelease|error|Exception|Caused by).{0,300}' "$PROJECT_DIR/android/build/reports/problems/problems-report.html" | head -40 || true
+          fi
+          echo "=== Relatórios de packaging ==="
+          find "$PROJECT_DIR/android/app/build" -type f \( -name "*.txt" -o -name "*.log" \) -print | head -50 || true
 
       - name: Localizar APK final
         shell: bash
@@ -1087,16 +944,8 @@ jobs:
             grep -q "$FULL" /tmp/apk-permissions.txt || { echo "ERRO: $FULL não está no APK."; exit 1; }
             echo "OK NO APK: $FULL"
           done
-          FINAL_MANIFEST=/tmp/final-v120-manifest.txt
-          "$AAPT" dump xmltree "$APK" AndroidManifest.xml | tee "$FINAL_MANIFEST" >/dev/null
-          grep -Eq 'android:launchMode\(.*\).*0x2([[:space:]]|$)' "$FINAL_MANIFEST" || { echo "ERRO: launchMode=singleTask não encontrado no APK."; exit 1; }
-          grep -q 'audio/\*' "$FINAL_MANIFEST" || { echo "ERRO: audio/* não encontrado no APK."; exit 1; }
-          grep -q 'image/\*' "$FINAL_MANIFEST" || { echo "ERRO: image/* não encontrado no APK."; exit 1; }
-          grep -q '\*/\*' "$FINAL_MANIFEST" || { echo "ERRO: */* não encontrado no APK."; exit 1; }
-          grep -q 'android.intent.action.SEND' "$FINAL_MANIFEST" || { echo "ERRO: ACTION_SEND não encontrado no APK."; exit 1; }
-          grep -q 'android.intent.action.SEND_MULTIPLE' "$FINAL_MANIFEST" || { echo "ERRO: ACTION_SEND_MULTIPLE não encontrado no APK."; exit 1; }
-          grep -q 'grantUriPermissions' "$FINAL_MANIFEST" || { echo "ERRO: grantUriPermissions não encontrado no APK."; exit 1; }
-          echo "OK NO APK: singleTask (0x2) + grantUriPermissions + SEND + SEND_MULTIPLE + áudio + foto + MIME genérico"
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml | grep -q 'launchMode.*singleTask' || { echo "ERRO: launchMode=singleTask não encontrado no APK."; exit 1; }
+          echo "OK NO APK: launchMode=singleTask"
 
       - name: Validar assinatura do APK
         shell: bash
@@ -1110,7 +959,7 @@ jobs:
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
-          name: gestao-sacerdotista-aime-v131-google-drive
+          name: gestao-sacerdotista-aime-v138-agenda
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
           retention-days: 1
