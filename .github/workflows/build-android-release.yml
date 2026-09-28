@@ -197,6 +197,8 @@ jobs:
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
           import android.webkit.ValueCallback;
+          import androidx.activity.result.ActivityResult;
+          import com.google.zxing.integration.android.IntentIntegrator;
           import android.util.Base64;
           import java.io.ByteArrayOutputStream;
           import java.io.File;
@@ -245,6 +247,9 @@ jobs:
               }),
               @Permission(alias = "microphone", strings = {
                 Manifest.permission.RECORD_AUDIO
+              }),
+              @Permission(alias = "camera", strings = {
+                Manifest.permission.CAMERA
               })
             }
           )
@@ -414,6 +419,61 @@ jobs:
             @PluginMethod public void readSharedMedia(PluginCall call) { String id=call.getString("id",""); File file=findById(id); if(file==null||!file.exists()){JSObject r=new JSObject();r.put("ok",false);call.resolve(r);return;} try{ByteArrayOutputStream output=new ByteArrayOutputStream();try(InputStream input=new FileInputStream(file)){byte[] buffer=new byte[8192];int read;while((read=input.read(buffer))!=-1)output.write(buffer,0,read);} JSObject r=metadata(file);r.put("ok",true);String mime=r.getString("mimeType","application/octet-stream");r.put("data","data:"+mime+";base64,"+Base64.encodeToString(output.toByteArray(),Base64.NO_WRAP));call.resolve(r);}catch(Exception ex){call.reject("SHARED_MEDIA_READ_ERROR",ex.getMessage()==null?"READ_FAILED":ex.getMessage());} }
             @PluginMethod public void deleteSharedMedia(PluginCall call) { String id=call.getString("id","");File file=findById(id);JSObject r=new JSObject();r.put("ok",file==null||file.delete());call.resolve(r); }
 
+            @PluginMethod public void requestCamera(PluginCall call) {
+              if (getPermissionState("camera") == PermissionState.GRANTED) {
+                JSObject r=new JSObject(); r.put("granted",true); r.put("state","granted"); call.resolve(r); return;
+              }
+              requestPermissionForAlias("camera", call, "cameraPermissionResult");
+            }
+
+            @PermissionCallback private void cameraPermissionResult(PluginCall call) {
+              boolean granted=getPermissionState("camera") == PermissionState.GRANTED;
+              JSObject r=new JSObject(); r.put("granted",granted); r.put("state",granted?"granted":"denied"); call.resolve(r);
+            }
+
+            @PluginMethod public void scanNfeQr(PluginCall call) {
+              try {
+                if (getPermissionState("camera") != PermissionState.GRANTED) {
+                  requestPermissionForAlias("camera", call, "cameraThenScanResult");
+                  return;
+                }
+                launchNfeQrScanner(call);
+              } catch (Exception ex) {
+                call.reject("NFE_QR_SCANNER_FAILED", ex.getMessage()==null?"Não foi possível abrir o leitor de QR Code.":ex.getMessage());
+              }
+            }
+
+            @PermissionCallback private void cameraThenScanResult(PluginCall call) {
+              if (getPermissionState("camera") != PermissionState.GRANTED) {
+                JSObject r=new JSObject(); r.put("ok",false); r.put("cancelled",true); r.put("error","Permissão da câmera não concedida."); call.resolve(r); return;
+              }
+              launchNfeQrScanner(call);
+            }
+
+            private void launchNfeQrScanner(PluginCall call) {
+              IntentIntegrator integrator = new IntentIntegrator(getActivity());
+              integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
+              integrator.setPrompt("Aponte a câmera para o QR Code da NFC-e");
+              integrator.setBeepEnabled(false);
+              integrator.setOrientationLocked(false);
+              Intent intent = integrator.createScanIntent();
+              startActivityForResult(call, intent, "scanNfeQrResult");
+            }
+
+            @com.getcapacitor.annotation.ActivityCallback
+            private void scanNfeQrResult(PluginCall call, ActivityResult result) {
+              if (call == null) return;
+              try {
+                com.google.zxing.integration.android.IntentResult scan = IntentIntegrator.parseActivityResult(result.getResultCode(), result.getData());
+                if (scan == null || scan.getContents() == null || scan.getContents().trim().isEmpty()) {
+                  JSObject r=new JSObject(); r.put("ok",false); r.put("cancelled",true); call.resolve(r); return;
+                }
+                JSObject r=new JSObject(); r.put("ok",true); r.put("value",scan.getContents().trim()); r.put("cancelled",false); call.resolve(r);
+              } catch (Exception ex) {
+                call.reject("NFE_QR_RESULT_FAILED", ex.getMessage()==null?"Não foi possível processar o QR Code.":ex.getMessage());
+              }
+            }
+
             @PluginMethod public void fetchNfeRenderedText(PluginCall call) {
               final String requestedUrl = call.getString("url", "");
               if (requestedUrl == null || requestedUrl.trim().isEmpty()) { call.reject("NFE_URL_EMPTY"); return; }
@@ -472,11 +532,11 @@ jobs:
 
                   @Override public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    handler.postDelayed(this::extract, 900);
+                    handler.postDelayed(this::extract, 500);
                   }
                 });
 
-                handler.postDelayed(timeout, 35000);
+                handler.postDelayed(timeout, 12000);
                 try { webView.loadUrl(requestedUrl.replace("|", "%7C")); }
                 catch (Exception ex) {
                   if (finished.compareAndSet(false, true)) {
@@ -509,8 +569,8 @@ jobs:
                   c = (HttpURLConnection) url.openConnection();
                   c.setInstanceFollowRedirects(true);
                   c.setRequestMethod("GET");
-                  c.setConnectTimeout(20000);
-                  c.setReadTimeout(30000);
+                  c.setConnectTimeout(8000);
+                  c.setReadTimeout(12000);
                   c.setUseCaches(false);
                   c.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
                   c.setRequestProperty("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7");
@@ -1029,6 +1089,9 @@ jobs:
           grep -q 'pingGoogleDriveBridge' "$PLUGIN"
           grep -q 'fetchNfePage' "$PLUGIN" || { echo "ERRO: fetchNfePage não encontrado em $PLUGIN"; exit 1; }
           grep -q 'fetchNfeRenderedText' "$PLUGIN" || { echo "ERRO: fetchNfeRenderedText não encontrado em $PLUGIN"; exit 1; }
+          grep -q 'scanNfeQr' "$PLUGIN" || { echo "ERRO: scanner nativo NFC-e não encontrado em $PLUGIN"; exit 1; }
+          grep -q 'zxing-android-embedded:4.3.0' "$PROJECT_DIR/android/app/build.gradle" || { echo "ERRO: ZXing nativo não configurado."; exit 1; }
+          grep -q 'requestCamera' "$PLUGIN" || { echo "ERRO: permissão de câmera não configurada."; exit 1; }
           grep -q 'listGoogleDriveBackups' "$PLUGIN"
           grep -q 'downloadGoogleDriveBackup' "$PLUGIN"
           grep -q 'scheduleAutomaticBackup' "$PLUGIN"
@@ -1209,12 +1272,12 @@ jobs:
 
           if "com.google.android.gms:play-services-auth:21.6.0" not in text:
               if "dependencies {" in text:
-                  text = text.replace("dependencies {", "dependencies {\n    implementation 'com.google.android.gms:play-services-auth:21.6.0'", 1)
+                  text = text.replace("dependencies {", "dependencies {\n    implementation 'com.google.android.gms:play-services-auth:21.6.0'\n    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'", 1)
               else:
                   text += "\ndependencies { implementation 'com.google.android.gms:play-services-auth:21.6.0' }\n"
 
-          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.50.0"', text, count=1)
-          text = re.sub(r'versionCode\s+\d+', 'versionCode 150', text, count=1)
+          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.53.0"', text, count=1)
+          text = re.sub(r'versionCode\s+\d+', 'versionCode 153', text, count=1)
 
           if 'signingConfigs {' not in text:
               signing = '''
