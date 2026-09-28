@@ -1091,6 +1091,7 @@ jobs:
           grep -q 'fetchNfeRenderedText' "$PLUGIN" || { echo "ERRO: fetchNfeRenderedText não encontrado em $PLUGIN"; exit 1; }
           grep -q 'scanNfeQr' "$PLUGIN" || { echo "ERRO: scanner nativo NFC-e não encontrado em $PLUGIN"; exit 1; }
           grep -q 'zxing-android-embedded:4.3.0' "$PROJECT_DIR/android/app/build.gradle" || { echo "ERRO: ZXing nativo não configurado."; exit 1; }
+          grep -q 'implementation.*com.journeyapps:zxing-android-embedded:4.3.0' "$PROJECT_DIR/android/app/build.gradle" || { echo "ERRO: declaração implementation do ZXing ausente."; exit 1; }
           grep -q 'requestCamera' "$PLUGIN" || { echo "ERRO: permissão de câmera não configurada."; exit 1; }
           grep -q 'listGoogleDriveBackups' "$PLUGIN"
           grep -q 'downloadGoogleDriveBackup' "$PLUGIN"
@@ -1270,11 +1271,21 @@ jobs:
           path = Path(sys.argv[1])
           text = path.read_text()
 
+          # Garantir cada dependência separadamente.
+          # A versão anterior só adicionava ZXing quando o Google Play Services
+          # também estava ausente; como o Play Services já estava presente,
+          # ZXing não era inserido e a validação falhava.
+          deps = []
           if "com.google.android.gms:play-services-auth:21.6.0" not in text:
+              deps.append("    implementation 'com.google.android.gms:play-services-auth:21.6.0'")
+          if "com.journeyapps:zxing-android-embedded:4.3.0" not in text:
+              deps.append("    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'")
+          if deps:
+              block = "dependencies {\n" + "\n".join(deps) + "\n"
               if "dependencies {" in text:
-                  text = text.replace("dependencies {", "dependencies {\n    implementation 'com.google.android.gms:play-services-auth:21.6.0'\n    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'", 1)
+                  text = text.replace("dependencies {", block, 1)
               else:
-                  text += "\ndependencies { implementation 'com.google.android.gms:play-services-auth:21.6.0' }\n"
+                  text += "\n" + block + "}\n"
 
           text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.53.0"', text, count=1)
           text = re.sub(r'versionCode\s+\d+', 'versionCode 153', text, count=1)
