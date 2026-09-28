@@ -688,69 +688,68 @@ jobs:
               text = text.replace(marker, "".join(additions) + marker, 1)
 
           import re
-          activity_marker = 'android:name=".MainActivity"'
-          if activity_marker in text:
-              activity_start = text.rfind("<activity", 0, text.find(activity_marker) + len(activity_marker))
-              activity_end = text.find("</activity>", activity_start)
-              if activity_start >= 0 and activity_end >= 0:
-                  activity_block = text[activity_start:activity_end]
-                  # O Android precisa encontrar a Activity como destino de compartilhamento.
-                  # Declaramos explicitamente exported/grantUriPermissions e aceitamos tanto
-                  # audio/* quanto */*. O segundo filtro cobre casos em que WhatsApp/Samsung
-                  # entrega o áudio como application/octet-stream ou outro MIME genérico; o
-                  # plugin valida o conteúdo antes de importar.
-                  activity_block = re.sub(r'\s+android:exported="[^"]*"', '', activity_block)
-                  activity_block = re.sub(r'\s+android:grantUriPermissions="[^"]*"', '', activity_block)
-                  activity_block = re.sub(r'\s+android:launchMode="[^"]*"', '', activity_block)
-                  activity_block = activity_block.replace(
-                      '<activity',
-                      '<activity android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask"',
-                      1,
-                  )
-                  # Remove filtros de compartilhamento que possam ter sido adicionados em
-                  # uma geração anterior e recria os dois filtros de forma determinística.
-                  activity_block = re.sub(
-                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND" />.*?</intent-filter>',
-                      '', activity_block, flags=re.S,
-                  )
-                  activity_block = re.sub(
-                      r'\s*<intent-filter>\s*<action android:name="android.intent.action.SEND_MULTIPLE" />.*?</intent-filter>',
-                      '', activity_block, flags=re.S,
-                  )
-                  intent_filter = """
-                  <intent-filter>
-                    <action android:name="android.intent.action.SEND" />
-                    <category android:name="android.intent.category.DEFAULT" />
-                    <data android:mimeType="audio/*" />
-                  </intent-filter>
-                  <intent-filter>
-                    <action android:name="android.intent.action.SEND_MULTIPLE" />
-                    <category android:name="android.intent.category.DEFAULT" />
-                    <data android:mimeType="audio/*" />
-                  </intent-filter>
-                  <intent-filter>
-                    <action android:name="android.intent.action.SEND" />
-                    <category android:name="android.intent.category.DEFAULT" />
-                    <data android:mimeType="image/*" />
-                  </intent-filter>
-                  <intent-filter>
-                    <action android:name="android.intent.action.SEND_MULTIPLE" />
-                    <category android:name="android.intent.category.DEFAULT" />
-                    <data android:mimeType="image/*" />
-                  </intent-filter>
-                  <intent-filter>
-                    <action android:name="android.intent.action.SEND" />
-                    <category android:name="android.intent.category.DEFAULT" />
-                    <data android:mimeType="*/*" />
-                  </intent-filter>
-                  <intent-filter>
-                    <action android:name="android.intent.action.SEND_MULTIPLE" />
-                    <category android:name="android.intent.category.DEFAULT" />
-                    <data android:mimeType="*/*" />
-                  </intent-filter>"""
-                  activity_block = activity_block + intent_filter
-                  text = text[:activity_start] + activity_block + text[activity_end:]
-          manifest.write_text(text)
+          import re
+    activity_pattern = re.compile(r'<activity\b(?=[^>]*android:name="\.MainActivity"')[^>]*>', re.S)
+    match = activity_pattern.search(text)
+    if match:
+        opening = match.group(0)
+        opening = re.sub(r'\s+android:exported="[^"]*"', '', opening)
+        opening = re.sub(r'\s+android:grantUriPermissions="[^"]*"', '', opening)
+        opening = re.sub(r'\s+android:launchMode="[^"]*"', '', opening)
+        opening = opening[:-1] + ' android:exported="true" android:grantUriPermissions="true" android:launchMode="singleTask">'
+        activity_start = match.start()
+        activity_end = match.end()
+        activity_block_start = activity_start
+        close_tag = text.find("</activity>", activity_end)
+        if close_tag >= 0:
+            activity_block_end = close_tag
+            activity_block = text[activity_start:activity_block_end]
+            activity_block = re.sub(
+                r'\s*<intent-filter>.*?</intent-filter>',
+                '',
+                activity_block,
+                flags=re.S,
+            )
+            activity_block = opening + activity_block[len(match.group(0)):]
+            intent_filter = """
+        <intent-filter>
+          <action android:name="android.intent.action.SEND" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="audio/*" />
+        </intent-filter>
+        <intent-filter>
+          <action android:name="android.intent.action.SEND_MULTIPLE" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="audio/*" />
+        </intent-filter>
+        <intent-filter>
+          <action android:name="android.intent.action.SEND" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="image/*" />
+        </intent-filter>
+        <intent-filter>
+          <action android:name="android.intent.action.SEND_MULTIPLE" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="image/*" />
+        </intent-filter>
+        <intent-filter>
+          <action android:name="android.intent.action.SEND" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="*/*" />
+        </intent-filter>
+        <intent-filter>
+          <action android:name="android.intent.action.SEND_MULTIPLE" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="*/*" />
+        </intent-filter>"""
+            activity_block += intent_filter
+            text = text[:activity_start] + activity_block + text[activity_block_end:]
+        else:
+            # Handle a self-closing MainActivity element.
+            text = text[:match.start()] + opening + text[match.end():]
+    else:
+        raise SystemExit("ERRO: MainActivity não encontrada no AndroidManifest.xml.")
+    manifest.write_text(text)
           PY
 
       - name: Proteger PermissionBridge contra remoção/otimização
@@ -878,7 +877,15 @@ jobs:
             grep -q "$FULL" "$MANIFEST" || { echo "ERRO: $FULL não está no Manifest."; exit 1; }
             echo "OK: $FULL"
           done
-          grep -q 'android:launchMode="singleTask"' "$MANIFEST" || { echo "ERRO: MainActivity sem launchMode=singleTask."; exit 1; }
+          python3 - "$MANIFEST" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+          text = Path(sys.argv[1]).read_text()
+          m = re.search(r'<activity\\b(?=[^>]*android:name="\\.MainActivity"')[^>]*>', text, re.S)
+          if not m or 'android:launchMode="singleTask"' not in m.group(0):
+              raise SystemExit("ERRO: MainActivity sem android:launchMode=\"singleTask\" no Manifest.")
+          PY
           echo "OK: MainActivity launchMode=singleTask"
           grep -q 'android.intent.action.SEND' "$MANIFEST" || { echo "ERRO: filtro ACTION_SEND ausente."; exit 1; }
           grep -q 'android.intent.action.SEND_MULTIPLE' "$MANIFEST" || { echo "ERRO: filtro ACTION_SEND_MULTIPLE ausente."; exit 1; }
@@ -956,20 +963,32 @@ jobs:
             echo "OK NO APK: $FULL"
           done
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/apk-manifest.txt
+          echo "=== MainActivity no APK ==="
+          awk '/E: activity/{block=$0; in_activity=1; next} in_activity{block=block"\n"$0; if($0 ~ /^E: / && $0 !~ /E: activity/){if(block ~ /MainActivity/) print block; block=$0}}' /tmp/apk-manifest.txt || true
           python3 - <<'PY'
           from pathlib import Path
           import re
           text = Path("/tmp/apk-manifest.txt").read_text(errors="replace")
+          blocks = re.split(r'(?=E: activity)', text)
           found = False
-          for block in text.split("E: activity")[1:]:
-              if ".MainActivity" in block and "android:launchMode" in block:
-                  if "singleTask" in block or re.search(r"android:launchMode.*(?:0x2\\b|=2\\b)", block):
-                      found = True
-                      break
+          for block in blocks:
+              if "MainActivity" not in block:
+                  continue
+              if "android:launchMode" not in block:
+                  continue
+              if "singleTask" in block:
+                  found = True
+                  break
+              # aapt can emit enum values numerically. Android launchMode:
+              # standard=0, singleTop=1, singleTask=2, singleInstance=3.
+              if re.search(r'android:launchMode[^\n]*?(?:0x2\b|=2\b)', block):
+                  found = True
+                  break
           if not found:
-              raise SystemExit("ERRO: launchMode=singleTask não encontrado na MainActivity do APK.")
+              print("ERRO: MainActivity no APK não contém launchMode=singleTask.")
+              raise SystemExit(1)
           PY
-          echo "OK NO APK: launchMode=singleTask"
+          echo "OK NO APK: MainActivity launchMode=singleTask"
 
       - name: Validar assinatura do APK
         shell: bash
