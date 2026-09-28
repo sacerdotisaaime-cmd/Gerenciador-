@@ -1,9 +1,3 @@
-Gestão Sacerdotista Aimê — V143
-YAML corrigido — alertas, alarmes exatos, som nativo e correções de compilação.
-Arquivo YAML completo abaixo.
-
-
-
 name: Build Android APK - V143 - ALERTA + ALARME + SOM CORRIGIDOS
 
 on:
