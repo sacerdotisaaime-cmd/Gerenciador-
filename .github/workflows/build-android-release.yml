@@ -1074,6 +1074,57 @@ jobs:
           }
           JAVA
 
+      - name: Garantir dependências Android NFC-e antes da validação
+        shell: bash
+        run: |
+          set -e
+          APP_GRADLE="$PROJECT_DIR/android/app/build.gradle"
+          test -f "$APP_GRADLE" || { echo "ERRO: build.gradle não encontrado."; exit 1; }
+
+          python3 - "$APP_GRADLE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          deps = [
+              "implementation 'com.google.android.gms:play-services-auth:21.6.0'",
+              "implementation 'com.journeyapps:zxing-android-embedded:4.3.0'",
+          ]
+
+          missing = [d for d in deps if d not in text]
+
+          if missing:
+              if "dependencies {" in text:
+                  text = text.replace(
+                      "dependencies {",
+                      "dependencies {\n" + "\n".join("    " + d for d in missing),
+                      1
+                  )
+              else:
+                  text += "\n\ndependencies {\n" + "\n".join(
+                      "    " + d for d in missing
+                  ) + "\n}\n"
+
+          path.write_text(text)
+          PY
+
+          grep -q "com.journeyapps:zxing-android-embedded:4.3.0" "$APP_GRADLE" || {
+            echo "ERRO: ZXing não pôde ser inserido no build.gradle."
+            exit 1
+          }
+          grep -q "implementation.*com.journeyapps:zxing-android-embedded:4.3.0" "$APP_GRADLE" || {
+            echo "ERRO: declaração implementation do ZXing não encontrada após inserção."
+            exit 1
+          }
+          grep -q "implementation.*com.google.android.gms:play-services-auth:21.6.0" "$APP_GRADLE" || {
+            echo "ERRO: Google Auth não encontrado após inserção."
+            exit 1
+          }
+
+          echo "OK: ZXing + Google Auth garantidos ANTES da validação nativa."
+
       - name: Validar integração nativa Google Drive
         shell: bash
         run: |
