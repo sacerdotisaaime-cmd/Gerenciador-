@@ -1,4 +1,4 @@
-name: Build Android APK - V150 - Backup Mestre + Mídia Persistente + Google Drive
+name: Build Android APK - V152 - NFC-e Leitura Inteligente + Backup Mestre + Mídia Persistente
 
 on:
   workflow_dispatch:
@@ -937,6 +937,7 @@ jobs:
           grep -q 'handleGoogleAuthorizationResult' "$MAIN"
           grep -q 'pingGoogleDriveBridge' "$PLUGIN"
           grep -q 'fetchNfePage' "$PLUGIN"
+          grep -q 'fetchNfeRenderedText' "$PLUGIN"
           grep -q 'listGoogleDriveBackups' "$PLUGIN"
           grep -q 'downloadGoogleDriveBackup' "$PLUGIN"
           grep -q 'scheduleAutomaticBackup' "$PLUGIN"
