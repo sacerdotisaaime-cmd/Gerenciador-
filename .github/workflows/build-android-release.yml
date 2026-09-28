@@ -191,6 +191,12 @@ jobs:
           import android.media.AudioAttributes;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.ValueCallback;
           import android.util.Base64;
           import java.io.ByteArrayOutputStream;
           import java.io.File;
@@ -208,6 +214,7 @@ jobs:
           import java.util.List;
           import java.util.concurrent.ExecutorService;
           import java.util.concurrent.Executors;
+          import java.util.concurrent.atomic.AtomicBoolean;
           import org.json.JSONArray;
           import org.json.JSONObject;
           import com.getcapacitor.JSObject;
@@ -406,6 +413,90 @@ jobs:
             @PluginMethod public void listSharedMedia(PluginCall call) { File[] files=inboxDir().listFiles(); JSArray arr=new JSArray(); if(files!=null)for(File file:files)if(file.isFile())arr.put(metadata(file)); JSObject result=new JSObject();result.put("items",arr);call.resolve(result); }
             @PluginMethod public void readSharedMedia(PluginCall call) { String id=call.getString("id",""); File file=findById(id); if(file==null||!file.exists()){JSObject r=new JSObject();r.put("ok",false);call.resolve(r);return;} try{ByteArrayOutputStream output=new ByteArrayOutputStream();try(InputStream input=new FileInputStream(file)){byte[] buffer=new byte[8192];int read;while((read=input.read(buffer))!=-1)output.write(buffer,0,read);} JSObject r=metadata(file);r.put("ok",true);String mime=r.getString("mimeType","application/octet-stream");r.put("data","data:"+mime+";base64,"+Base64.encodeToString(output.toByteArray(),Base64.NO_WRAP));call.resolve(r);}catch(Exception ex){call.reject("SHARED_MEDIA_READ_ERROR",ex.getMessage()==null?"READ_FAILED":ex.getMessage());} }
             @PluginMethod public void deleteSharedMedia(PluginCall call) { String id=call.getString("id","");File file=findById(id);JSObject r=new JSObject();r.put("ok",file==null||file.delete());call.resolve(r); }
+
+            @PluginMethod public void fetchNfeRenderedText(PluginCall call) {
+              final String requestedUrl = call.getString("url", "");
+              if (requestedUrl == null || requestedUrl.trim().isEmpty()) { call.reject("NFE_URL_EMPTY"); return; }
+              final android.app.Activity activity = getActivity();
+              if (activity == null) { call.reject("NFE_ACTIVITY_UNAVAILABLE", "A tela do aplicativo não está disponível para abrir a consulta da NFC-e."); return; }
+              activity.runOnUiThread(() -> {
+                final WebView webView = new WebView(activity);
+                final Handler handler = new Handler(Looper.getMainLooper());
+                final AtomicBoolean finished = new AtomicBoolean(false);
+                final Runnable timeout = () -> {
+                  if (!finished.compareAndSet(false, true)) return;
+                  try { webView.stopLoading(); webView.destroy(); } catch (Exception ignored) {}
+                  JSObject result = new JSObject();
+                  result.put("ok", false);
+                  result.put("status", 0);
+                  result.put("url", requestedUrl);
+                  result.put("bodyText", "");
+                  result.put("bodyHtml", "");
+                  result.put("error", "NFE_WEBVIEW_TIMEOUT");
+                  call.resolve(result);
+                };
+
+                WebSettings settings = webView.getSettings();
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                settings.setLoadsImagesAutomatically(false);
+                settings.setUserAgentString("Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                  settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+                  android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+                }
+
+                webView.setWebViewClient(new WebViewClient() {
+                  private void extract() {
+                    if (finished.get()) return;
+                    final String textScript = "document.body ? document.body.innerText : ''";
+                    final String htmlScript = "document.documentElement ? document.documentElement.outerHTML : ''";
+                    webView.evaluateJavascript(textScript, textValue -> webView.evaluateJavascript(htmlScript, htmlValue -> {
+                      if (!finished.compareAndSet(false, true)) return;
+                      handler.removeCallbacks(timeout);
+                      String bodyText = decodeWebViewValue(textValue);
+                      String bodyHtml = decodeWebViewValue(htmlValue);
+                      JSObject result = new JSObject();
+                      result.put("ok", bodyText != null && !bodyText.trim().isEmpty());
+                      result.put("status", 200);
+                      result.put("url", webView.getUrl() == null ? requestedUrl : webView.getUrl());
+                      result.put("contentType", "text/html");
+                      result.put("bodyText", bodyText == null ? "" : bodyText);
+                      result.put("bodyHtml", bodyHtml == null ? "" : bodyHtml);
+                      if (bodyText == null || bodyText.trim().isEmpty()) result.put("error", "NFE_RENDERED_TEXT_EMPTY");
+                      try { webView.stopLoading(); webView.destroy(); } catch (Exception ignored) {}
+                      call.resolve(result);
+                    }));
+                  }
+
+                  @Override public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    handler.postDelayed(this::extract, 900);
+                  }
+                });
+
+                handler.postDelayed(timeout, 35000);
+                try { webView.loadUrl(requestedUrl.replace("|", "%7C")); }
+                catch (Exception ex) {
+                  if (finished.compareAndSet(false, true)) {
+                    handler.removeCallbacks(timeout);
+                    try { webView.destroy(); } catch (Exception ignored) {}
+                    call.resolve(new JSObject().put("ok", false).put("status", 0).put("bodyText", "").put("bodyHtml", "").put("error", ex.getMessage() == null ? "NFE_WEBVIEW_LOAD_FAILED" : ex.getMessage()));
+                  }
+                }
+              });
+            }
+
+            private static String decodeWebViewValue(String value) {
+              if (value == null || value.equals("null")) return "";
+              try {
+                Object parsed = new org.json.JSONTokener(value).nextValue();
+                return parsed == null ? "" : String.valueOf(parsed);
+              } catch (Exception ignored) {
+                return value;
+              }
+            }
 
             @PluginMethod public void fetchNfePage(PluginCall call) {
               final String requestedUrl = call.getString("url", "");
@@ -936,8 +1027,8 @@ jobs:
           grep -q 'registerPlugin(PermissionBridgePlugin.class)' "$MAIN"
           grep -q 'handleGoogleAuthorizationResult' "$MAIN"
           grep -q 'pingGoogleDriveBridge' "$PLUGIN"
-          grep -q 'fetchNfePage' "$PLUGIN"
-          grep -q 'fetchNfeRenderedText' "$PLUGIN"
+          grep -q 'fetchNfePage' "$PLUGIN" || { echo "ERRO: fetchNfePage não encontrado em $PLUGIN"; exit 1; }
+          grep -q 'fetchNfeRenderedText' "$PLUGIN" || { echo "ERRO: fetchNfeRenderedText não encontrado em $PLUGIN"; exit 1; }
           grep -q 'listGoogleDriveBackups' "$PLUGIN"
           grep -q 'downloadGoogleDriveBackup' "$PLUGIN"
           grep -q 'scheduleAutomaticBackup' "$PLUGIN"
