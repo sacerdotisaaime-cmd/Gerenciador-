@@ -913,7 +913,7 @@ jobs:
           cd "$PROJECT_DIR/android"
           chmod +x gradlew
 
-          ./gradlew clean assembleRelease --no-daemon --stacktrace
+          ./gradlew clean assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
 
       - name: Diagnóstico de empacotamento Android
         if: failure()
