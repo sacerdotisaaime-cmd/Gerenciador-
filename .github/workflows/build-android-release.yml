@@ -955,7 +955,20 @@ jobs:
             grep -q "$FULL" /tmp/apk-permissions.txt || { echo "ERRO: $FULL não está no APK."; exit 1; }
             echo "OK NO APK: $FULL"
           done
-          "$AAPT" dump xmltree "$APK" AndroidManifest.xml | grep -q 'singleTask' || { echo "ERRO: launchMode=singleTask não encontrado no APK."; exit 1; }
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/apk-manifest.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("/tmp/apk-manifest.txt").read_text(errors="replace")
+          found = False
+          for block in text.split("E: activity")[1:]:
+              if ".MainActivity" in block and "android:launchMode" in block:
+                  if "singleTask" in block or re.search(r"android:launchMode.*(?:0x2\\b|=2\\b)", block):
+                      found = True
+                      break
+          if not found:
+              raise SystemExit("ERRO: launchMode=singleTask não encontrado na MainActivity do APK.")
+          PY
           echo "OK NO APK: launchMode=singleTask"
 
       - name: Validar assinatura do APK
