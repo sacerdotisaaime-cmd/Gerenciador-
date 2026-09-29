@@ -1,4 +1,4 @@
-name: Build Android APK - V152 - NFC-e Leitura Inteligente + Backup Mestre + Mídia Persistente
+name: Build Android APK - V155 - NFC-e Classificação Multilinha + Backup Mestre + Mídia Persistente
 
 on:
   workflow_dispatch:
@@ -1125,6 +1125,17 @@ jobs:
 
           echo "OK: ZXing + Google Auth garantidos ANTES da validação nativa."
 
+      - name: Validar parser NFC-e no código-fonte
+        shell: bash
+        run: |
+          set -e
+          APP="$PROJECT_DIR/src/App.tsx"
+          test -f "$APP" || { echo "ERRO: src/App.tsx não encontrado."; exit 1; }
+          grep -q 'const parseNfeReadableText' "$APP" || { echo "ERRO: parser NFC-e não encontrado."; exit 1; }
+          grep -q 'const codePattern' "$APP" || { echo "ERRO: reconhecimento de Código da NFC-e não encontrado."; exit 1; }
+          grep -q 'codePattern.test(lines\[j\])' "$APP" || { echo "ERRO: proteção contra perda do Vl. Total do item não encontrada."; exit 1; }
+          echo "OK: parser NFC-e multilinha presente no código-fonte."
+
       - name: Validar integração nativa Google Drive
         shell: bash
         run: |
@@ -1338,8 +1349,8 @@ jobs:
               else:
                   text += "\n" + block + "}\n"
 
-          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.53.0"', text, count=1)
-          text = re.sub(r'versionCode\s+\d+', 'versionCode 153', text, count=1)
+          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.55.0"', text, count=1)
+          text = re.sub(r'versionCode\s+\d+', 'versionCode 155', text, count=1)
 
           if 'signingConfigs {' not in text:
               signing = '''
