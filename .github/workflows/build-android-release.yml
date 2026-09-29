@@ -1132,7 +1132,7 @@ jobs:
           APP="$PROJECT_DIR/src/App.tsx"
           test -f "$APP" || { echo "ERRO: src/App.tsx não encontrado."; exit 1; }
           grep -q 'const parseNfeReadableText' "$APP" || { echo "ERRO: parser NFC-e não encontrado."; exit 1; }
-          grep -q 'const codePattern' "$APP" || { echo "ERRO: reconhecimento de Código da NFC-e não encontrado."; exit 1; }
+          grep -q 'const codeCompletePattern' "$APP" || { echo "ERRO: reconhecimento de Código da NFC-e não encontrado."; exit 1; }
           grep -q 'const codeStartPattern' "$APP" || { echo "ERRO: parser robusto por marcador de código não encontrado."; exit 1; }
           grep -q 'Não marque arbitrariamente seis linhas' "$APP" || { echo "ERRO: correção de consumo de linhas do próximo produto não encontrada."; exit 1; }
           grep -q 'blockEndLineIndex' "$APP" || { echo "ERRO: controle de limite do bloco do produto não encontrado."; exit 1; }
