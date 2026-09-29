@@ -1,4 +1,4 @@
-name: Build Android APK - V155 - NFC-e Classificação Multilinha + Backup Mestre + Mídia Persistente
+name: Build Android APK - V156 - NFC-e Classificação Robusta + Backup Mestre + Mídia Persistente
 
 on:
   workflow_dispatch:
@@ -1133,8 +1133,10 @@ jobs:
           test -f "$APP" || { echo "ERRO: src/App.tsx não encontrado."; exit 1; }
           grep -q 'const parseNfeReadableText' "$APP" || { echo "ERRO: parser NFC-e não encontrado."; exit 1; }
           grep -q 'const codePattern' "$APP" || { echo "ERRO: reconhecimento de Código da NFC-e não encontrado."; exit 1; }
-          grep -q 'codePattern.test(lines\[j\])' "$APP" || { echo "ERRO: proteção contra perda do Vl. Total do item não encontrada."; exit 1; }
-          echo "OK: parser NFC-e multilinha presente no código-fonte."
+          grep -q 'const codeStartPattern' "$APP" || { echo "ERRO: parser robusto por marcador de código não encontrado."; exit 1; }
+          grep -q 'Não marque arbitrariamente seis linhas' "$APP" || { echo "ERRO: correção de consumo de linhas do próximo produto não encontrada."; exit 1; }
+          grep -q 'blockEndLineIndex' "$APP" || { echo "ERRO: controle de limite do bloco do produto não encontrado."; exit 1; }
+          echo "OK: parser NFC-e robusto por produto/multilinha presente no código-fonte."
 
       - name: Validar integração nativa Google Drive
         shell: bash
