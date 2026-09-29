@@ -1134,8 +1134,10 @@ jobs:
           grep -q 'const parseNfeReadableText' "$APP" || { echo "ERRO: parser NFC-e não encontrado."; exit 1; }
           grep -q 'const codeCompletePattern' "$APP" || { echo "ERRO: reconhecimento de Código da NFC-e não encontrado."; exit 1; }
           grep -q 'const codeStartPattern' "$APP" || { echo "ERRO: parser robusto por marcador de código não encontrado."; exit 1; }
-          grep -q 'Não marque arbitrariamente seis linhas' "$APP" || { echo "ERRO: correção de consumo de linhas do próximo produto não encontrada."; exit 1; }
+          # A mensagem explicativa pode estar quebrada em mais de uma linha no TypeScript.
+          # O teste funcional deve verificar o mecanismo real, não uma frase de comentário.
           grep -q 'blockEndLineIndex' "$APP" || { echo "ERRO: controle de limite do bloco do produto não encontrado."; exit 1; }
+          grep -q 'consumeEnd' "$APP" || { echo "ERRO: controle de consumo do bloco do produto não encontrado."; exit 1; }
           echo "OK: parser NFC-e robusto por produto/multilinha presente no código-fonte."
 
       - name: Validar integração nativa Google Drive
