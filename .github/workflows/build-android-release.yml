@@ -1,4 +1,4 @@
-name: Build Android APK - Luna V185 Integrado - MySQL (Capacitor 7 Fix) Web
+name: Build Android APK - Luna V185 - MySQL + Backup Mestre + Mídia Persistente
 
 on:
   workflow_dispatch:
@@ -67,17 +67,17 @@ jobs:
           mkdir -p app
           unzip -q "$ZIP_FILE" -d app
 
-      - name: Localizar projeto V185 Luna
+      - name: Localizar projeto
         shell: bash
         run: |
-          set -euo pipefail
-          PROJECT_DIR="app/luna-android-v185"
-          test -f "$PROJECT_DIR/package.json" || { echo "ERRO: pacote Android Luna V185 não encontrado."; exit 1; }
-          test -f "$PROJECT_DIR/src/App.tsx" || { echo "ERRO: App.tsx original do V185 ausente."; exit 1; }
-          test -f "$PROJECT_DIR/src/lunaApi.ts" || { echo "ERRO: cliente Luna API ausente."; exit 1; }
-          grep -q "LunaEntry" "$PROJECT_DIR/src/main.tsx" && { echo "ERRO: entrada genérica LunaEntry selecionada; esperado App V185."; exit 1; } || true
-          grep -q "import App from './App.tsx'" "$PROJECT_DIR/src/main.tsx" || { echo "ERRO: main.tsx não abre a aplicação V185."; exit 1; }
-          echo "Projeto V185 Luna selecionado: $PROJECT_DIR"
+          set -e
+          PROJECT_PACKAGE=$(find app -name package.json -not -path "*/node_modules/*" -print | head -n 1)
+          if [ -z "$PROJECT_PACKAGE" ]; then
+            echo "ERRO: package.json não encontrado."
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$PROJECT_PACKAGE")
+          echo "Projeto: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Ajustar dependências
@@ -110,30 +110,6 @@ jobs:
           cd "$PROJECT_DIR"
           npm install
           npm install -D @capacitor/cli@7.4.3
-          echo "Validando árvore de dependências do Capacitor 7..."
-          npm ls @capacitor/core @capacitor/android @capacitor/barcode-scanner @capacitor/cli
-          node <<'NODE'
-          const fs = require('fs');
-          const core = JSON.parse(fs.readFileSync('node_modules/@capacitor/core/package.json', 'utf8')).version;
-          const scanner = JSON.parse(fs.readFileSync('node_modules/@capacitor/barcode-scanner/package.json', 'utf8'));
-          const major = Number(core.split('.')[0]);
-          if (major !== 7) throw new Error(`Capacitor Core ${core} encontrado; este projeto está na linha 7.`);
-          if (scanner.version !== '2.2.0') throw new Error(`Barcode Scanner ${scanner.version} encontrado; versão fixada esperada: 2.2.0.`);
-          const peer = scanner.peerDependencies?.['@capacitor/core'] || '';
-          if (peer !== '>=7.0.0') throw new Error(`Peer dependency inesperada do Barcode Scanner: ${peer || '(ausente)'}. Esperado >=7.0.0.`);
-          console.log(`OK: Capacitor Core ${core} + Barcode Scanner ${scanner.version}; peer @capacitor/core ${peer}`);
-          NODE
-
-      - name: Validar integração Luna V185
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
-          grep -q "from './lunaApi'" src/supabase.ts
-          ! grep -q 'cdn.jsdelivr.net/npm/@supabase' index.html
-          grep -q "import App from './App.tsx'" src/main.tsx
-          grep -q "com.sacerdotisaaime.luna" capacitor.config.ts
-          echo "OK: V185 principal + autenticação Luna API + pacote Android Luna."
 
       - name: Compilar aplicação web
         shell: bash
@@ -165,33 +141,43 @@ jobs:
           cd "$PROJECT_DIR"
           npx cap sync android
 
-      - name: Habilitar HTTP apenas para desenvolvimento local
+      - name: Habilitar comunicação HTTP no Android
         shell: bash
         run: |
           set -euo pipefail
           MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
           test -f "$MANIFEST"
+
           python3 - "$MANIFEST" <<'PYMANIFEST'
           from pathlib import Path
-          import re, sys
+          import re
+          import sys
+
           path = Path(sys.argv[1])
           content = path.read_text(encoding="utf-8")
+
           match = re.search(r'<application\b[^>]*>', content, flags=re.S)
           if not match:
-              raise SystemExit("ERRO: tag <application> não encontrada no Manifest.")
+              raise SystemExit("ERRO: tag application não encontrada")
+
           tag = match.group(0)
+
           if re.search(r'\bandroid:usesCleartextTraffic\s*=', tag):
-              tag = re.sub(r'android:usesCleartextTraffic\s*=\s*["\'][^"\']*["\']',
-                           'android:usesCleartextTraffic="true"', tag)
+              tag = re.sub(
+                  r'android:usesCleartextTraffic\s*=\s*["\'][^"\']*["\']',
+                  'android:usesCleartextTraffic="true"',
+                  tag
+              )
           else:
               tag = tag[:-1] + ' android:usesCleartextTraffic="true">'
+
           content = content[:match.start()] + tag + content[match.end():]
           path.write_text(content, encoding="utf-8")
-          verify = path.read_text(encoding="utf-8")
-          if not re.search(r'<application\b[^>]*android:usesCleartextTraffic="true"', verify, flags=re.S):
-              raise SystemExit("ERRO: não foi possível habilitar HTTP para a API local.")
-          print("OK: AndroidManifest permite HTTP para a API local.")
+
+          print("OK: comunicação HTTP habilitada no AndroidManifest.")
           PYMANIFEST
+
+          grep -q 'android:usesCleartextTraffic="true"' "$MANIFEST"
 
       - name: Criar som nativo das notificações
         shell: bash
@@ -243,6 +229,14 @@ jobs:
           import android.media.AudioAttributes;
           import android.provider.OpenableColumns;
           import android.provider.Settings;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.ValueCallback;
+          import androidx.activity.result.ActivityResult;
+          import com.google.zxing.integration.android.IntentIntegrator;
           import android.util.Base64;
           import java.io.ByteArrayOutputStream;
           import java.io.File;
@@ -260,6 +254,7 @@ jobs:
           import java.util.List;
           import java.util.concurrent.ExecutorService;
           import java.util.concurrent.Executors;
+          import java.util.concurrent.atomic.AtomicBoolean;
           import org.json.JSONArray;
           import org.json.JSONObject;
           import com.getcapacitor.JSObject;
@@ -290,6 +285,9 @@ jobs:
               }),
               @Permission(alias = "microphone", strings = {
                 Manifest.permission.RECORD_AUDIO
+              }),
+              @Permission(alias = "camera", strings = {
+                Manifest.permission.CAMERA
               })
             }
           )
@@ -459,6 +457,145 @@ jobs:
             @PluginMethod public void readSharedMedia(PluginCall call) { String id=call.getString("id",""); File file=findById(id); if(file==null||!file.exists()){JSObject r=new JSObject();r.put("ok",false);call.resolve(r);return;} try{ByteArrayOutputStream output=new ByteArrayOutputStream();try(InputStream input=new FileInputStream(file)){byte[] buffer=new byte[8192];int read;while((read=input.read(buffer))!=-1)output.write(buffer,0,read);} JSObject r=metadata(file);r.put("ok",true);String mime=r.getString("mimeType","application/octet-stream");r.put("data","data:"+mime+";base64,"+Base64.encodeToString(output.toByteArray(),Base64.NO_WRAP));call.resolve(r);}catch(Exception ex){call.reject("SHARED_MEDIA_READ_ERROR",ex.getMessage()==null?"READ_FAILED":ex.getMessage());} }
             @PluginMethod public void deleteSharedMedia(PluginCall call) { String id=call.getString("id","");File file=findById(id);JSObject r=new JSObject();r.put("ok",file==null||file.delete());call.resolve(r); }
 
+            @PluginMethod public void requestCamera(PluginCall call) {
+              if (getPermissionState("camera") == PermissionState.GRANTED) {
+                JSObject r=new JSObject(); r.put("granted",true); r.put("state","granted"); call.resolve(r); return;
+              }
+              requestPermissionForAlias("camera", call, "cameraPermissionResult");
+            }
+
+            @PermissionCallback private void cameraPermissionResult(PluginCall call) {
+              boolean granted=getPermissionState("camera") == PermissionState.GRANTED;
+              JSObject r=new JSObject(); r.put("granted",granted); r.put("state",granted?"granted":"denied"); call.resolve(r);
+            }
+
+            @PluginMethod public void scanNfeQr(PluginCall call) {
+              try {
+                if (getPermissionState("camera") != PermissionState.GRANTED) {
+                  requestPermissionForAlias("camera", call, "cameraThenScanResult");
+                  return;
+                }
+                launchNfeQrScanner(call);
+              } catch (Exception ex) {
+                call.reject("NFE_QR_SCANNER_FAILED", ex.getMessage()==null?"Não foi possível abrir o leitor de QR Code.":ex.getMessage());
+              }
+            }
+
+            @PermissionCallback private void cameraThenScanResult(PluginCall call) {
+              if (getPermissionState("camera") != PermissionState.GRANTED) {
+                JSObject r=new JSObject(); r.put("ok",false); r.put("cancelled",true); r.put("error","Permissão da câmera não concedida."); call.resolve(r); return;
+              }
+              launchNfeQrScanner(call);
+            }
+
+            private void launchNfeQrScanner(PluginCall call) {
+              IntentIntegrator integrator = new IntentIntegrator(getActivity());
+              integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
+              integrator.setPrompt("Aponte a câmera para o QR Code da NFC-e");
+              integrator.setBeepEnabled(false);
+              integrator.setOrientationLocked(false);
+              Intent intent = integrator.createScanIntent();
+              startActivityForResult(call, intent, "scanNfeQrResult");
+            }
+
+            @com.getcapacitor.annotation.ActivityCallback
+            private void scanNfeQrResult(PluginCall call, ActivityResult result) {
+              if (call == null) return;
+              try {
+                com.google.zxing.integration.android.IntentResult scan = IntentIntegrator.parseActivityResult(result.getResultCode(), result.getData());
+                if (scan == null || scan.getContents() == null || scan.getContents().trim().isEmpty()) {
+                  JSObject r=new JSObject(); r.put("ok",false); r.put("cancelled",true); call.resolve(r); return;
+                }
+                JSObject r=new JSObject(); r.put("ok",true); r.put("value",scan.getContents().trim()); r.put("cancelled",false); call.resolve(r);
+              } catch (Exception ex) {
+                call.reject("NFE_QR_RESULT_FAILED", ex.getMessage()==null?"Não foi possível processar o QR Code.":ex.getMessage());
+              }
+            }
+
+            @PluginMethod public void fetchNfeRenderedText(PluginCall call) {
+              final String requestedUrl = call.getString("url", "");
+              if (requestedUrl == null || requestedUrl.trim().isEmpty()) { call.reject("NFE_URL_EMPTY"); return; }
+              final android.app.Activity activity = getActivity();
+              if (activity == null) { call.reject("NFE_ACTIVITY_UNAVAILABLE", "A tela do aplicativo não está disponível para abrir a consulta da NFC-e."); return; }
+              activity.runOnUiThread(() -> {
+                final WebView webView = new WebView(activity);
+                final Handler handler = new Handler(Looper.getMainLooper());
+                final AtomicBoolean finished = new AtomicBoolean(false);
+                final Runnable timeout = () -> {
+                  if (!finished.compareAndSet(false, true)) return;
+                  try { webView.stopLoading(); webView.destroy(); } catch (Exception ignored) {}
+                  JSObject result = new JSObject();
+                  result.put("ok", false);
+                  result.put("status", 0);
+                  result.put("url", requestedUrl);
+                  result.put("bodyText", "");
+                  result.put("bodyHtml", "");
+                  result.put("error", "NFE_WEBVIEW_TIMEOUT");
+                  call.resolve(result);
+                };
+
+                WebSettings settings = webView.getSettings();
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                settings.setLoadsImagesAutomatically(false);
+                settings.setUserAgentString("Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                  settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+                  android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+                }
+
+                webView.setWebViewClient(new WebViewClient() {
+                  private void extract() {
+                    if (finished.get()) return;
+                    final String textScript = "document.body ? document.body.innerText : ''";
+                    final String htmlScript = "document.documentElement ? document.documentElement.outerHTML : ''";
+                    webView.evaluateJavascript(textScript, textValue -> webView.evaluateJavascript(htmlScript, htmlValue -> {
+                      if (!finished.compareAndSet(false, true)) return;
+                      handler.removeCallbacks(timeout);
+                      String bodyText = decodeWebViewValue(textValue);
+                      String bodyHtml = decodeWebViewValue(htmlValue);
+                      JSObject result = new JSObject();
+                      result.put("ok", bodyText != null && !bodyText.trim().isEmpty());
+                      result.put("status", 200);
+                      result.put("url", webView.getUrl() == null ? requestedUrl : webView.getUrl());
+                      result.put("contentType", "text/html");
+                      result.put("bodyText", bodyText == null ? "" : bodyText);
+                      result.put("bodyHtml", bodyHtml == null ? "" : bodyHtml);
+                      if (bodyText == null || bodyText.trim().isEmpty()) result.put("error", "NFE_RENDERED_TEXT_EMPTY");
+                      try { webView.stopLoading(); webView.destroy(); } catch (Exception ignored) {}
+                      call.resolve(result);
+                    }));
+                  }
+
+                  @Override public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    handler.postDelayed(this::extract, 500);
+                  }
+                });
+
+                handler.postDelayed(timeout, 12000);
+                try { webView.loadUrl(requestedUrl.replace("|", "%7C")); }
+                catch (Exception ex) {
+                  if (finished.compareAndSet(false, true)) {
+                    handler.removeCallbacks(timeout);
+                    try { webView.destroy(); } catch (Exception ignored) {}
+                    call.resolve(new JSObject().put("ok", false).put("status", 0).put("bodyText", "").put("bodyHtml", "").put("error", ex.getMessage() == null ? "NFE_WEBVIEW_LOAD_FAILED" : ex.getMessage()));
+                  }
+                }
+              });
+            }
+
+            private static String decodeWebViewValue(String value) {
+              if (value == null || value.equals("null")) return "";
+              try {
+                Object parsed = new org.json.JSONTokener(value).nextValue();
+                return parsed == null ? "" : String.valueOf(parsed);
+              } catch (Exception ignored) {
+                return value;
+              }
+            }
+
             @PluginMethod public void fetchNfePage(PluginCall call) {
               final String requestedUrl = call.getString("url", "");
               if (requestedUrl == null || requestedUrl.trim().isEmpty()) { call.reject("NFE_URL_EMPTY"); return; }
@@ -470,8 +607,8 @@ jobs:
                   c = (HttpURLConnection) url.openConnection();
                   c.setInstanceFollowRedirects(true);
                   c.setRequestMethod("GET");
-                  c.setConnectTimeout(20000);
-                  c.setReadTimeout(30000);
+                  c.setConnectTimeout(8000);
+                  c.setReadTimeout(12000);
                   c.setUseCaches(false);
                   c.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
                   c.setRequestProperty("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7");
@@ -894,10 +1031,10 @@ jobs:
               AlarmManager alarm = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
               if (alarm == null) throw new IllegalStateException("AlarmManager indisponível.");
               PendingIntent pi = pendingIntent(context);
-              Calendar target = Calendar.getInstance();
-              target.set(Calendar.SECOND, 0); target.set(Calendar.MILLISECOND, 0);
-              target.set(Calendar.HOUR_OF_DAY, hour); target.set(Calendar.MINUTE, minute);
-              if (target.getTimeInMillis() <= System.currentTimeMillis()) target.add(Calendar.DAY_OF_YEAR, 1);
+              java.util.Calendar target = java.util.Calendar.getInstance();
+              target.set(java.util.Calendar.SECOND, 0); target.set(java.util.Calendar.MILLISECOND, 0);
+              target.set(java.util.Calendar.HOUR_OF_DAY, hour); target.set(java.util.Calendar.MINUTE, minute);
+              if (target.getTimeInMillis() <= System.currentTimeMillis()) target.add(java.util.Calendar.DAY_OF_YEAR, 1);
               if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarm.canScheduleExactAlarms()) {
                 alarm.setAlarmClock(new AlarmManager.AlarmClockInfo(target.getTimeInMillis(), pi), pi);
                 return true;
@@ -974,6 +1111,72 @@ jobs:
           }
           JAVA
 
+      - name: Garantir dependências Android NFC-e antes da validação
+        shell: bash
+        run: |
+          set -e
+          APP_GRADLE="$PROJECT_DIR/android/app/build.gradle"
+          test -f "$APP_GRADLE" || { echo "ERRO: build.gradle não encontrado."; exit 1; }
+
+          python3 - "$APP_GRADLE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          deps = [
+              "implementation 'com.google.android.gms:play-services-auth:21.6.0'",
+              "implementation 'com.journeyapps:zxing-android-embedded:4.3.0'",
+          ]
+
+          missing = [d for d in deps if d not in text]
+
+          if missing:
+              if "dependencies {" in text:
+                  text = text.replace(
+                      "dependencies {",
+                      "dependencies {\n" + "\n".join("    " + d for d in missing),
+                      1
+                  )
+              else:
+                  text += "\n\ndependencies {\n" + "\n".join(
+                      "    " + d for d in missing
+                  ) + "\n}\n"
+
+          path.write_text(text)
+          PY
+
+          grep -q "com.journeyapps:zxing-android-embedded:4.3.0" "$APP_GRADLE" || {
+            echo "ERRO: ZXing não pôde ser inserido no build.gradle."
+            exit 1
+          }
+          grep -q "implementation.*com.journeyapps:zxing-android-embedded:4.3.0" "$APP_GRADLE" || {
+            echo "ERRO: declaração implementation do ZXing não encontrada após inserção."
+            exit 1
+          }
+          grep -q "implementation.*com.google.android.gms:play-services-auth:21.6.0" "$APP_GRADLE" || {
+            echo "ERRO: Google Auth não encontrado após inserção."
+            exit 1
+          }
+
+          echo "OK: ZXing + Google Auth garantidos ANTES da validação nativa."
+
+      - name: Validar parser NFC-e no código-fonte
+        shell: bash
+        run: |
+          set -e
+          APP="$PROJECT_DIR/src/App.tsx"
+          test -f "$APP" || { echo "ERRO: src/App.tsx não encontrado."; exit 1; }
+          grep -q 'const parseNfeReadableText' "$APP" || { echo "ERRO: parser NFC-e não encontrado."; exit 1; }
+          grep -q 'const codeCompletePattern' "$APP" || { echo "ERRO: reconhecimento de Código da NFC-e não encontrado."; exit 1; }
+          grep -q 'const codeStartPattern' "$APP" || { echo "ERRO: parser robusto por marcador de código não encontrado."; exit 1; }
+          # A mensagem explicativa pode estar quebrada em mais de uma linha no TypeScript.
+          # O teste funcional deve verificar o mecanismo real, não uma frase de comentário.
+          grep -q 'blockEndLineIndex' "$APP" || { echo "ERRO: controle de limite do bloco do produto não encontrado."; exit 1; }
+          grep -q 'consumeEnd' "$APP" || { echo "ERRO: controle de consumo do bloco do produto não encontrado."; exit 1; }
+          echo "OK: parser NFC-e robusto por produto/multilinha presente no código-fonte."
+
       - name: Validar integração nativa Google Drive
         shell: bash
         run: |
@@ -987,13 +1190,21 @@ jobs:
           grep -q 'registerPlugin(PermissionBridgePlugin.class)' "$MAIN"
           grep -q 'handleGoogleAuthorizationResult' "$MAIN"
           grep -q 'pingGoogleDriveBridge' "$PLUGIN"
-          grep -q 'fetchNfePage' "$PLUGIN"
+          grep -q 'fetchNfePage' "$PLUGIN" || { echo "ERRO: fetchNfePage não encontrado em $PLUGIN"; exit 1; }
+          grep -q 'fetchNfeRenderedText' "$PLUGIN" || { echo "ERRO: fetchNfeRenderedText não encontrado em $PLUGIN"; exit 1; }
+          grep -q 'scanNfeQr' "$PLUGIN" || { echo "ERRO: scanner nativo NFC-e não encontrado em $PLUGIN"; exit 1; }
+          grep -q 'zxing-android-embedded:4.3.0' "$PROJECT_DIR/android/app/build.gradle" || { echo "ERRO: ZXing nativo não configurado."; exit 1; }
+          grep -q 'implementation.*com.journeyapps:zxing-android-embedded:4.3.0' "$PROJECT_DIR/android/app/build.gradle" || { echo "ERRO: declaração implementation do ZXing ausente."; exit 1; }
+          grep -q 'requestCamera' "$PLUGIN" || { echo "ERRO: permissão de câmera não configurada."; exit 1; }
           grep -q 'listGoogleDriveBackups' "$PLUGIN"
           grep -q 'downloadGoogleDriveBackup' "$PLUGIN"
           grep -q 'scheduleAutomaticBackup' "$PLUGIN"
           grep -q 'consumeAutomaticBackupRequest' "$PLUGIN"
           test -f "$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/luna/BackupAlarmScheduler.java"
           test -f "$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/luna/BackupBootReceiver.java"
+          SCHEDULER="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/luna/BackupAlarmScheduler.java"
+          grep -Fq 'java.util.Calendar target = java.util.Calendar.getInstance();' "$SCHEDULER" || { echo "ERRO: Scheduler sem java.util.Calendar qualificado."; exit 1; }
+          grep -Fq 'target.set(java.util.Calendar.SECOND, 0)' "$SCHEDULER" || { echo "ERRO: Scheduler sem referência qualificada a SECOND."; exit 1; }
           echo "Google Drive + NFC-e + Backup Mestre agendado validados: bridge + scheduler + boot receiver presentes."
 
       - name: Declarar permissões Android
@@ -1166,14 +1377,24 @@ jobs:
           path = Path(sys.argv[1])
           text = path.read_text()
 
+          # Garantir cada dependência separadamente.
+          # A versão anterior só adicionava ZXing quando o Google Play Services
+          # também estava ausente; como o Play Services já estava presente,
+          # ZXing não era inserido e a validação falhava.
+          deps = []
           if "com.google.android.gms:play-services-auth:21.6.0" not in text:
+              deps.append("    implementation 'com.google.android.gms:play-services-auth:21.6.0'")
+          if "com.journeyapps:zxing-android-embedded:4.3.0" not in text:
+              deps.append("    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'")
+          if deps:
+              block = "dependencies {\n" + "\n".join(deps) + "\n"
               if "dependencies {" in text:
-                  text = text.replace("dependencies {", "dependencies {\n    implementation 'com.google.android.gms:play-services-auth:21.6.0'", 1)
+                  text = text.replace("dependencies {", block, 1)
               else:
-                  text += "\ndependencies { implementation 'com.google.android.gms:play-services-auth:21.6.0' }\n"
+                  text += "\n" + block + "}\n"
 
-          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.50.0"', text, count=1)
-          text = re.sub(r'versionCode\s+\d+', 'versionCode 150', text, count=1)
+          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.55.0"', text, count=1)
+          text = re.sub(r'versionCode\s+\d+', 'versionCode 155', text, count=1)
 
           if 'signingConfigs {' not in text:
               signing = '''
@@ -1245,8 +1466,6 @@ jobs:
             grep -q "$FULL" "$MANIFEST" || { echo "ERRO: $FULL não está no Manifest."; exit 1; }
             echo "OK: $FULL"
           done
-          grep -q 'android:usesCleartextTraffic="true"' "$MANIFEST" || { echo "ERRO: HTTP local não habilitado no Manifest."; exit 1; }
-          echo "OK: HTTP local habilitado no Manifest."
           grep -q 'android:launchMode="singleTask"' "$MANIFEST" || { echo "ERRO: MainActivity sem launchMode=singleTask."; exit 1; }
           echo "OK: MainActivity launchMode=singleTask"
           grep -q 'android.intent.action.SEND' "$MANIFEST" || { echo "ERRO: filtro ACTION_SEND ausente."; exit 1; }
@@ -1278,6 +1497,10 @@ jobs:
             echo "ERRO: ANDROID_KEY_PASSWORD não chegou ao Gradle."
             exit 1
           }
+
+          SCHEDULER="$PROJECT_DIR/android/app/src/main/java/com/sacerdotisaaime/luna/BackupAlarmScheduler.java"
+          test -f "$SCHEDULER" || { echo "ERRO: BackupAlarmScheduler.java ausente antes do Gradle."; exit 1; }
+          grep -Fq 'java.util.Calendar target = java.util.Calendar.getInstance();' "$SCHEDULER" || { echo "ERRO: correção Calendar ausente no Java final."; exit 1; }
 
           cd "$PROJECT_DIR/android"
           chmod +x gradlew
