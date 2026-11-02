@@ -67,17 +67,32 @@ jobs:
           mkdir -p app
           unzip -q "$ZIP_FILE" -d app
 
-      - name: Localizar projeto
+      - name: Localizar projeto Luna correto
         shell: bash
         run: |
-          set -e
-          PROJECT_PACKAGE=$(find app -name package.json -not -path "*/node_modules/*" -print | head -n 1)
-          if [ -z "$PROJECT_PACKAGE" ]; then
-            echo "ERRO: package.json não encontrado."
+          set -euo pipefail
+          mapfile -t PACKAGES < <(find app -name package.json -not -path "*/node_modules/*" -print | sort)
+          MATCHES=()
+          for PACKAGE in "${PACKAGES[@]}"; do
+            CANDIDATE="$(dirname "$PACKAGE")"
+            MAIN="$CANDIDATE/src/main.tsx"
+            ENTRY="$CANDIDATE/src/LunaEntry.tsx"
+            if [ -f "$ENTRY" ] && [ -f "$MAIN" ] && grep -q "LunaEntry" "$MAIN"; then
+              MATCHES+=("$CANDIDATE")
+            fi
+          done
+
+          if [ "${#MATCHES[@]}" -ne 1 ]; then
+            echo "ERRO: esperado exatamente 1 projeto Luna com src/LunaEntry.tsx e main.tsx apontando para LunaEntry."
+            echo "Projetos encontrados:"
+            printf '%s\\n' "${PACKAGES[@]}"
+            echo "Projetos Luna válidos: ${#MATCHES[@]}"
+            printf '%s\\n' "${MATCHES[@]}"
             exit 1
           fi
-          PROJECT_DIR=$(dirname "$PROJECT_PACKAGE")
-          echo "Projeto: $PROJECT_DIR"
+
+          PROJECT_DIR="${MATCHES[0]}"
+          echo "Projeto Luna selecionado: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Ajustar dependências
@@ -140,6 +155,44 @@ jobs:
           set -e
           cd "$PROJECT_DIR"
           npx cap sync android
+
+      - name: Habilitar comunicação HTTP no Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST="$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
+          test -f "$MANIFEST"
+
+          python3 - "$MANIFEST" <<'PYMANIFEST'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          content = path.read_text(encoding="utf-8")
+
+          match = re.search(r'<application\b[^>]*>', content, flags=re.S)
+          if not match:
+              raise SystemExit("ERRO: tag application não encontrada")
+
+          tag = match.group(0)
+
+          if re.search(r'\bandroid:usesCleartextTraffic\s*=', tag):
+              tag = re.sub(
+                  r'android:usesCleartextTraffic\s*=\s*["\'][^"\']*["\']',
+                  'android:usesCleartextTraffic="true"',
+                  tag
+              )
+          else:
+              tag = tag[:-1] + ' android:usesCleartextTraffic="true">'
+
+          content = content[:match.start()] + tag + content[match.end():]
+          path.write_text(content, encoding="utf-8")
+
+          print("OK: comunicação HTTP habilitada no AndroidManifest.")
+          PYMANIFEST
+
+          grep -q 'android:usesCleartextTraffic="true"' "$MANIFEST"
 
       - name: Criar som nativo das notificações
         shell: bash
@@ -1426,6 +1479,8 @@ jobs:
             grep -q "$FULL" "$MANIFEST" || { echo "ERRO: $FULL não está no Manifest."; exit 1; }
             echo "OK: $FULL"
           done
+          grep -q 'android:usesCleartextTraffic="true"' "$MANIFEST" || { echo "ERRO: comunicação HTTP não habilitada no Manifest."; exit 1; }
+          echo "OK: comunicação HTTP habilitada no Manifest."
           grep -q 'android:launchMode="singleTask"' "$MANIFEST" || { echo "ERRO: MainActivity sem launchMode=singleTask."; exit 1; }
           echo "OK: MainActivity launchMode=singleTask"
           grep -q 'android.intent.action.SEND' "$MANIFEST" || { echo "ERRO: filtro ACTION_SEND ausente."; exit 1; }
