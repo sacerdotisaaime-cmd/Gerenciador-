@@ -1,4 +1,4 @@
-name: Build Android APK - Luna V185 Integrado - MySQL Web
+name: Build Android APK - Luna V185 Integrado - MySQL (Capacitor 7 Fix) Web
 
 on:
   workflow_dispatch:
@@ -97,7 +97,7 @@ jobs:
           deps['@capacitor/filesystem'] = '^7.0.2';
           deps['@capacitor-community/contacts'] = '7.2.0';
           deps['capacitor-voice-recorder'] = '7.0.6';
-          deps['@capacitor/barcode-scanner'] = '3.1.2';
+          deps['@capacitor/barcode-scanner'] = '2.2.1';
           fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
           NODE
           rm -rf node_modules
@@ -110,6 +110,17 @@ jobs:
           cd "$PROJECT_DIR"
           npm install
           npm install -D @capacitor/cli@7.4.3
+          echo "Validando árvore de dependências do Capacitor 7..."
+          npm ls @capacitor/core @capacitor/android @capacitor/barcode-scanner @capacitor/cli
+          node <<'NODE'
+          const fs = require('fs');
+          const core = JSON.parse(fs.readFileSync('node_modules/@capacitor/core/package.json', 'utf8')).version;
+          const scanner = JSON.parse(fs.readFileSync('node_modules/@capacitor/barcode-scanner/package.json', 'utf8'));
+          const major = Number(core.split('.')[0]);
+          if (major !== 7) throw new Error(`Capacitor Core ${core} encontrado; este projeto está na linha 7.`);
+          if (!scanner.version.startsWith('2.')) throw new Error(`Barcode Scanner ${scanner.version} incompatível: esperado versão 2.x para Capacitor 7.`);
+          console.log(`OK: Capacitor Core ${core} + Barcode Scanner ${scanner.version}`);
+          NODE
 
       - name: Validar integração Luna V185
         shell: bash
