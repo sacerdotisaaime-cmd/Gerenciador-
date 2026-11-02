@@ -97,7 +97,7 @@ jobs:
           deps['@capacitor/filesystem'] = '^7.0.2';
           deps['@capacitor-community/contacts'] = '7.2.0';
           deps['capacitor-voice-recorder'] = '7.0.6';
-          deps['@capacitor/barcode-scanner'] = '2.2.1';
+          deps['@capacitor/barcode-scanner'] = '2.2.0';
           fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
           NODE
           rm -rf node_modules
@@ -118,8 +118,10 @@ jobs:
           const scanner = JSON.parse(fs.readFileSync('node_modules/@capacitor/barcode-scanner/package.json', 'utf8'));
           const major = Number(core.split('.')[0]);
           if (major !== 7) throw new Error(`Capacitor Core ${core} encontrado; este projeto está na linha 7.`);
-          if (!scanner.version.startsWith('2.')) throw new Error(`Barcode Scanner ${scanner.version} incompatível: esperado versão 2.x para Capacitor 7.`);
-          console.log(`OK: Capacitor Core ${core} + Barcode Scanner ${scanner.version}`);
+          if (scanner.version !== '2.2.0') throw new Error(`Barcode Scanner ${scanner.version} encontrado; versão fixada esperada: 2.2.0.`);
+          const peer = scanner.peerDependencies?.['@capacitor/core'] || '';
+          if (peer !== '>=7.0.0') throw new Error(`Peer dependency inesperada do Barcode Scanner: ${peer || '(ausente)'}. Esperado >=7.0.0.`);
+          console.log(`OK: Capacitor Core ${core} + Barcode Scanner ${scanner.version}; peer @capacitor/core ${peer}`);
           NODE
 
       - name: Validar integração Luna V185
